@@ -364,11 +364,13 @@ alpha = alpha_range(matno_record,:) .* matfsIndex;
 beta = beta_range(matno_record,:) .* matfsIndex;
 [rowIdcs, ~] = find(matfs > 0);
 
-% Find the indices of unique values in rowIdcs
+% Finds the indices of unique values in rowIdcs, makes col vector where
+% each entry is "how many nonzero freq.s exist in a given row of matfs"
+% i.e. how many frequencies per each material.
 [UniqueRowIdcs, ~] = unique(rowIdcs, 'rows');
 ColDuplicate = sum(matfs(UniqueRowIdcs,:) ~= 0, 2);
 
-% Repeat by the number of loss data of each design point
+% Each parameter is copied for each valid frequency
 Po                  = repelem(Po(UniqueRowIdcs), ColDuplicate);
 fs                  = repelem(fs(UniqueRowIdcs), ColDuplicate);
 Vin                 = repelem(Vin(UniqueRowIdcs), ColDuplicate);
@@ -392,35 +394,35 @@ airgap              = repelem(airgap(UniqueRowIdcs), ColDuplicate);
 XcoreIndex          = repelem(XcoreIndex(UniqueRowIdcs), ColDuplicate);
 XcoreCoreShapeIndex = repelem(XcoreCoreShapeIndex(UniqueRowIdcs), ColDuplicate);
 
-% Reformat loss data into one non-zero vector
+% Reformats valid frequency values and steinmetz loss data into column vectors
 matfs = nonzeros(reshape(matfs(UniqueRowIdcs,:)',[],1));
 K1 = nonzeros(reshape(K1(UniqueRowIdcs,:)',[],1));
 beta = nonzeros(reshape(beta(UniqueRowIdcs,:)',[],1));
 alpha = nonzeros(reshape(alpha(UniqueRowIdcs,:)',[],1));
 
+% Checks if valid designs exist, throws error if not.
+% Otherwise, design computations continue.
 size(Po)
 if (isempty(Po))
     warning('No successful inductor results Test1, Inductor.');
     y = 0;
 else
-    % Repeat elements by Primary Wire Number of Strands
+    
+    % Estimate strand size and calculate strand count needed for primary winding.
     skindepth = 1./sqrt(pi*fs*u0/rou);
-    % Overwritten variable
     ds = max(skindepth, MinLitzDia*ones(size(skindepth))); % take the skin depth litz
-    %ds = MinLitzDia * ones(size(skindepth));
-    %commented to use the more realistic value
     MinPriNstrands = floor((Imax./Jwmax)./(pi*ds.^2/4))+1;
     MaxPriNstrands = floor((Imax./Jwmax*1.0)./(pi*ds.^2/4))+1;
 
-    % Test
+    % Tests for validity
     priCount = MaxPriNstrands - MinPriNstrands + 1;
     if any(priCount < 1)
         bad = find(priCount < 1, 1);
         error('Strands:BadPrimaryCounts', ...
               'Computed primary strand counts <=0 at row %d. Check Po, Vppeak, Jwmax, MinLitzDia.', bad);
     end
-    % Testend
-        
+
+    % Replicates all design parameters so each possible primary strand configuration has a full matching set of values.
     Po                  = repelem(Po, priCount);
     fs                  = repelem(fs, priCount);
     Vin                 = repelem(Vin, priCount);
@@ -448,15 +450,13 @@ else
     XcoreIndex          = repelem(XcoreIndex, priCount);
     XcoreCoreShapeIndex = repelem(XcoreCoreShapeIndex, priCount);
 
-
+    % Generates a column vector of all possible primary strand counts between the calculated minimum and maximum, repeated for each design case.
     Pri_Nstrands = repmat((MinPriNstrands(1):1:MaxPriNstrands(1))', length(MaxPriNstrands), 1);
 
-    % Calculate core loss (W)
+    % Computes RMS primary current, effective core permeability with air gap, and peak flux density.
     Iprms = Imax ./ sqrt(2);
     ue = ui ./ (1 + ui .* airgap ./ Le);
     Bm = u0.*Np.*Imax./Le.*ue;
-    %(changed from /ue to *ue)
-
 
     % Window area
     Wa = H .* W;
@@ -469,18 +469,15 @@ else
 
     %% Wire
 
-    % Recalculate ds
+    % Calculates conductor skin depth and sets strand diameter to the larger of skin depth or minimum litz size.
     skindepth = 1 ./ sqrt(pi * fs * u0 / rou);
-    % Overwritten variable
-    ds = max(skindepth, MinLitzDia * ones(size(skindepth))); %#ok<NASGU> % take the skin depth litz
-    ds = MinLitzDia * ones(size(skindepth)); % take the smallest litz
+    ds = max(skindepth, MinLitzDia * ones(size(skindepth)));
     
     % Primary wire diameter (m)
     Pri_WireSize = sqrt(Pri_Nstrands.*pi.*ds.^2./4./LitzFactor./pi).*2;
     
     % Primary wire diameter (m) including the insulation layer
     Pri_FullWireSize = Pri_WireSize+((Vpri./Np)./dielectricstrength_insulation).*2;
-    % changed from Vin to Vpri./Np
 
     % Packing factors
     CopperPacking = (pi.*Pri_WireSize.^2.*Np./4)./(H.*W);
