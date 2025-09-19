@@ -187,19 +187,26 @@ end
 % Core size data parsing
 [m1,~] = size(raw);
 TransformerCoreIndex = cell2mat(raw(2:m1,1));
+
 % Effective core volume in m^3
 XcoreVe = cell2mat(raw(2:m1,3))/(1000^3);
+
 % Cross-sectional area in m^2
 XcoreAe = cell2mat(raw(2:m1,4))/(1000^2);
+
 % Magnetic path length in m
 XcoreLe = cell2mat(raw(2:m1,5))/1000;
 
+% 1 for EE, 2 for ER, will be 3 for U and 4 for UR
 XcoreCoreShapeIndex = cell2mat(raw(2:m1,6));
+
 % Primary winding window dimensions in m
 XcorePriW = cell2mat(raw(2:m1,8))/1000;
 XcorePriH = cell2mat(raw(2:m1,9))/1000;
+
 % Not used here for some reason
 XcoreSecW = cell2mat(raw(2:m1,10))/1000; %#ok<NASGU>
+
 % Not used here for some reason
 XcoreSecH = cell2mat(raw(2:m1,11))/1000; %#ok<NASGU>
 
