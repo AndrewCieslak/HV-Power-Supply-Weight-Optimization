@@ -9,5 +9,6 @@ Current issues I have identified:
 -  Need to implement winding pattern == 2 code for the transformer script.
 -  General fixes need to be performed on the RTC script to get it working.
 -  Main LLC script doesn't work for high voltages for the inductor, which is the main purpose of the script. I believe this is due to some airgap or geometry issue.
-
-Need to ensure realism of data through cross-checking with thesis results.
+-  Need to ensure realism of data through cross-checking with more of the thesis results. Transformer comparison has already been done and is in the comparison .xlsx file
+-  Need to comment what each block of code is doing for readability and debugging
+-  Need to add error handling and debugging printing in the terminal for common issues and diagnosis of problems.
