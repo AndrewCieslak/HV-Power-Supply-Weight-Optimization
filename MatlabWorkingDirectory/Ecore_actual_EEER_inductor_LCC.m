@@ -484,7 +484,6 @@ else
     OverallPacking = (pi.*Pri_FullWireSize.^2.*Np./4)./(H.*W);
     
     % Winding structures
-    % Core insulation thickness needed
     CoreInsulationThickness = Vinsulation_max./dielectricstrength_insulation;
     
     % Turns per layer
@@ -569,6 +568,7 @@ else
         % Preallocate Design_inductor
         Design_inductor = zeros(numel(TotalWeightSortIndex), 43);
 
+        % Fills each column with their respective data, then returns the table as an output for the function.
         Design_inductor(:, 1)  = Po(TotalWeightSortIndex);
         Design_inductor(:, 2)  = Vin(TotalWeightSortIndex);
         Design_inductor(:, 3)  = Vpri(TotalWeightSortIndex);
