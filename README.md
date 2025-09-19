@@ -8,5 +8,6 @@ Current issues I have identified:
 -  Need to change the winding arrangement code according to thesis 147-158 to allow for ER double-leg as well as U and UR geometries (since EE,ER,U,UR are the best for HV power magnetics)
 -  Need to implement winding pattern == 2 code for the transformer script.
 -  General fixes need to be performed on the RTC script to get it working.
+-  Main LLC script doesn't work for high voltages for the inductor, which is the main purpose of the script. I believe this is due to some airgap or geometry issue.
 
 Need to ensure realism of data through cross-checking with thesis results.
