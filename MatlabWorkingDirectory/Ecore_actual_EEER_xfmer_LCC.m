@@ -398,7 +398,7 @@ else
 
     % Secondary: fixed to specific litz family (178-5790) -> 19 strands
     skindepth = 1./sqrt(pi*fs*u0/rou);
-    ds = MinLitzDia*ones(size(skindepth)); %#ok<NASGU>
+    ds = max(skindepth, MinLitzDia*ones(size(skindepth)));
     MinSecNstrands = 19*ones(size(skindepth));%178-5790 has 19 strands.
     MaxSecNstrands = 19*ones(size(skindepth));%178-5790 has 19 strands.
     secCount = MaxSecNstrands - MinSecNstrands + 1; %#ok<NASGU>
@@ -445,7 +445,7 @@ else
     Isrms  = Po./(Vspeak/sqrt(2));
     Ispeak = Isrms*sqrt(2);
     skindepth = 1./sqrt(pi*fs*u0/rou);
-    ds = MinLitzDia*ones(size(skindepth));
+    ds = max(skindepth, MinLitzDia*ones(size(skindepth)));
     
     % Flux and core loss
     lamda = Vppeak./pi./fs;         % volt-second per radian
