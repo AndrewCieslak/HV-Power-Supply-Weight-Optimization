@@ -4,7 +4,7 @@ function y = Ecore_actual_EEER_xfmer_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6, ...
     MinTapeMargin,kaptonDensity,CoreInsulationDensity,WireInsulationDensity,dielectricstrength_insulation, ...
     etaXfmer,TmaxX,TminX,MinPriWindingX,MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
     BSAT_discountX,CoreLossMultipleX,maxpackingfactorX,minpackingfactorX,LitzFactor,MinWireDia,...
-    Jwmax,MinLitzDia,CopperDensity,rou,u0)
+    Jwmax,MinLitzDia,CopperDensity,rou,u0,XCp)
 
 % Body of function
 %% --------------------------------------------------------------------------------------
@@ -199,10 +199,11 @@ Mls                  = Mls(KeepIndex);
 if isempty(Po)
     fprintf('Bm_dummy range: %.3f .. %.3f T\n', min(Bm_dummy), max(Bm_dummy));
     fprintf('BSAT*0.75 range: %.3f .. %.3f T\n', min(BSAT*BSAT_discountX), max(BSAT*BSAT_discountX));
-    error(['Empty. Every candidate design violates the B-SAT screening.' ...
+    warning(['Empty. Every candidate design violates the B-SAT screening.' ...
         'Increase transformer geometry size (likely), or Increase Np range, ' ...
         'or loosen other ranges, or ensure units match. Try again']);
-    return; %#ok<UNRCH>
+    y=0;
+    return;
 end
 
 
@@ -232,9 +233,11 @@ ColDuplicate = sum(matfs(UniqueRowIdcs,:)~=0,2);
 
 % Test
 if isempty(rowIdcs)
-    error('CoreLoss:NoUsableColumns', ...
+    warning('CoreLoss:NoUsableColumns', ...
           ['No datasheet loss columns within ±20% of fs=%g Hz for any selected material.\n' ...
            'Check CoreLossData.xlsx sheets: Freq/Bfield/Ploss pairs and fs_range.'], fs_range);
+    y=0;
+    return;
 end
 
 % Repeat by the number of loss data of each design point
@@ -290,6 +293,9 @@ else
 
     skindepth = 1./sqrt(pi*fs*u0/rou);
     Ns = ceil(Np.*(Vspeak./Vppeak));
+
+    % THIS NEEDS TO BE CHANGED FOR MAGNETIZING CURRENT!
+
     % Primary Current
     Iprms = (Po/etaXfmer)./(Vppeak/sqrt(2));
     Ippeak = Iprms*sqrt(2);
@@ -328,18 +334,18 @@ else
     % Computes for skindepth but not DC resistance...
     MinLitzDia = MinLitzDia*ones(length(skindepth),1);
     dstrandMinlitz=max(MinLitzDia,2.*skindepth);          % [m]
-    AstrandMin=pi.*(dstrandMinlitz./2).^2;                   % [m^2]
+    Astrand=pi.*(dstrandMinlitz./2).^2;                   % [m^2]
     
     % Primary wire diameter, number of strands, and jacket+wire diameter
     % ----------------
 
     Pri_Nstrands=ones(size(Iprms));
-    Pri_Nstrands(~useSolid_p)=ceil(Areq_p(~useSolid_p)./AstrandMin(~useSolid_p));
+    Pri_Nstrands(~useSolid_p)=ceil(Areq_p(~useSolid_p)./Astrand(~useSolid_p));
 
     Pri_WireDia=max(MinWireDia,dsolid_p);
     idx=~useSolid_p;
     if any(idx)
-        Pri_WireDia(idx)=2.*sqrt(Pri_Nstrands(idx).*AstrandMin(idx).*LitzFactor./pi);
+        Pri_WireDia(idx)=2.*sqrt(Pri_Nstrands(idx).*Astrand(idx).*LitzFactor./pi);
     end
     % Strand diameter
     Pri_ds=max(MinWireDia,dsolid_p);
@@ -354,11 +360,11 @@ else
     % ----------------
 
     Sec_Nstrands=ones(size(Isrms));
-    Sec_Nstrands(~useSolid_s)=ceil(Areq_s(~useSolid_s)./AstrandMin(~useSolid_s));
+    Sec_Nstrands(~useSolid_s)=ceil(Areq_s(~useSolid_s)./Astrand(~useSolid_s));
     Sec_WireDia=max(MinWireDia,dsolid_s);
     idx=~useSolid_s;
     if any(idx)
-        Sec_WireDia(idx)=2.*sqrt(Sec_Nstrands(idx).*AstrandMin(idx).*LitzFactor./pi);
+        Sec_WireDia(idx)=2.*sqrt(Sec_Nstrands(idx).*Astrand(idx).*LitzFactor./pi);
     end
     % Strand diameter
     Sec_ds=max(MinWireDia,dsolid_s);
@@ -625,17 +631,13 @@ else
     
     % In this section, I need to include 187-190 calculations
 
-    %XCp = 1/(2.*pi.*fs.*Cp)
-
     % Magnetizing inductance
-    % Lm = ui.*u0.*Ac.*Np.^2./Le;
-    % XLm = 2.*pi.*fs.*Lm;
-    % 
-    % WireInsulThickness = (Pri_FullWireDia-Pri_WireDia)./2;
-
-    % Lleak = (u0.*Np.^2.*Tls)./(H-2.*WireInsulThickness).*...
-    %     (WireInsulThickness+(Pri_PerLayer.*Pri_FullWireDia+ ...
-    %     Sec_PerLayer.*Sec_FullWireDia)./3);
+    
+    Lm = ui.*u0.*Ac.*Np.^2./Le;
+    WireInsulThickness = (Pri_FullWireDia-Pri_WireDia)./2;
+    Lleak = (u0.*Np.^2.*TLs)./(H-2.*WireInsulThickness).*...
+        (WireInsulThickness+(Pri_PerLayer.*Pri_FullWireDia+ ...
+        Sec_PerLayer.*Sec_FullWireDia)./3);
 
     % Unit length turn-to-tun capacitance following equation 8
     % Ctt = 0; % look at source
@@ -692,32 +694,32 @@ else
 
     if isempty(P_loss_index)
         fprintf("Transformer Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d",Pmin,PminValIndex);
-        y = zeros(1,39);
+        y = zeros(1,43);
         return
     end
     if isempty(Tafterloss_index)
         fprintf("Transformer Bottlenecked. Min T out of all candidates: %.2f Index: %d",Tminimum,TminValIndex);
-        y = zeros(1,39);
+        y = zeros(1,43);
         return
     end
     if isempty(B_index)
         fprintf("Transformer Bottlenecked. Min B out of all candidates: %.2f Index: %d",Bmin,BminIndex);
-        y = zeros(1,39);
+        y = zeros(1,43);
         return
     end
     if isempty(TotalWeight_index)
         fprintf("Transformer Bottlenecked. Min Weight out of all candidates: %.2f Index: %d",WMin,WminValIndex);
-        y = zeros(1,39);
+        y = zeros(1,43);
         return
     end
     if isempty(OverallPackingmin_index)
         fprintf("Transformer Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d",PackingMin,PackingMinValIndex);
-        y = zeros(1,39);
+        y = zeros(1,43);
         return
     end
     if isempty(OverallPackingmax_index)
         fprintf("Transformer Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d",PackingMax,PackingMaxValIndex);
-        y = zeros(1,39);
+        y = zeros(1,43);
         return
     end
 
@@ -792,7 +794,7 @@ else
 
     if isempty(WindowFit_index)
         fprintf("Transformer Bottlenecked. Max window area");
-        y = zeros(1,39);
+        y = zeros(1,41);
         return
     end
 
@@ -824,6 +826,11 @@ else
         Sec_WireAWG = -39*log(Sec_WireDiaMM./0.127)./log(92)+36;
         Pri_WireDiaMM = Pri_WireDia.*1000;
         Pri_WireAWG = -39*log(Pri_WireDiaMM./0.127)./log(92)+36;
+
+        Sec_StrandDiaMM = Sec_ds.*1000;
+        Sec_StrandAWG = -39*log(Sec_StrandDiaMM./0.127)./log(92)+36;
+        Pri_StrandDiaMM = Pri_ds.*1000;
+        Pri_StrandAWG = -39*log(Pri_StrandDiaMM./0.127)./log(92)+36;
 
         Design(:, 1)  = Po(TotalWeightSortIndex);
         Design(:, 2)  = Vppeak(TotalWeightSortIndex);
@@ -866,9 +873,15 @@ else
         Design(:,37)  = Tafterloss(TotalWeightSortIndex);
         Design(:,38)  = XcoreIndex(TotalWeightSortIndex);
         Design(:,39)  = Volume_m3(TotalWeightSortIndex);
+        Design(:,40)  = Lm(TotalWeightSortIndex);
+        Design(:,41)  = Lleak(TotalWeightSortIndex);
+        Design(:,42)  = Pri_StrandAWG(TotalWeightSortIndex);
+        Design(:,43)  = Sec_StrandAWG(TotalWeightSortIndex);
+
+
         y = Design;
     else
-        y = zeros(1,39);
+        y = zeros(1,43);
         disp('Requirements not met. Filtered indexes == 0');
     end
 end
