@@ -1,8 +1,8 @@
 clc, clf, clear
 
-corelossfile = 'CoreLossData.xlsx';
+corelossfile = 'CoreLossDataOLD.xlsx';
 coresizefile = 'CoreSizeData.xlsx';
-coresizeSheetname = 'Ecore';
+coresizeSheetname = 'OwnedCores';
 
 raw1 = readcell(corelossfile,'Sheet','Freq');
 raw2 = readcell(corelossfile,'Sheet','Bfield');
@@ -22,27 +22,63 @@ raw = readcell(coresizefile,'Sheet',coresizeSheetname);
 % thesis, with A being the capacitance parallel vs. series ratio i.e.
 % the inductance leakage vs. magnetizing ratio.
 
-Date = '10-14-25';
+% Really, since leakage and magnetizing inductance aren't used in the code
+% provided by the thesis and thus the output, the only things that matter
+% from the output when actually building a core is the Ls, Cs, Cp, frequency,
+% input voltage, output power, number of layers, and turns ratio. As long as 
+% the script returns a positive result, it means I can make a set of
+% magnetics with those parameters. During the design process,
+% I only really care about it giving me the component values, the physical
+% characteristics vary so much and are determined based on the electrical
+% characteristics that are needed. The estimations of weight, winding
+% number, etc. are all estimates for comparison tables so we don't have to
+% make a bunch of transformers and inductors. The actual design process is
+% much simpler, and different. Magnetizing inductance and leakage
+% inductance is important for design but not the graphs, so I should add
+% that so this script can be used for both.
+
+% ui is assumed for ur in all equations.
+
+% magnetizing inductance, parallel capacitance, and leakage inductance aren't limited, since they
+% may help soft switching operation (source needed). Lleak, Cpara, and
+% Lmag are not constrained. Fortunately, m-value matches for both
+% capacitance and inductance ratio.
+
+% NEED TO CHECK IF MAGNETIZING INDUCTANCE AND LEAKAGE INDUCTANCE EFFECTS
+% ARE MODELED IN THIS SCRIPT!! 299-305 in XFMER
+% Check if inductor Imax accounts for magnetizing current
+% GPT told me this, it might be wrong:
+    % Need to account for magnetizing rms current:
+    %   Im_rms = Vp_rms / (omega * Lm);
+    % And leakage energy loss
+    %   Pleak = 0.5 * Lleak * Ipk^2 * fsw; 
+    % And ZVS condition
+    %   0.5*Lm*Im_peak^2 >= 0.5*Ceq*Vbus^2
+    % And circulating current in copper loss
+
+% For litz, the main AWG is an equivalent for the whole bundle.
+
+Date = '11-13-25';
 % Quality factor
 Q_range = 0.2:0.1:1;
 % Resonant frequency
-f0_range = 100000;
+f0_range = 25000;
 % frequency of the transformer
 fs_range = f0_range;
 
 % Capacitance ratio (inverse of inductance ratio) (shouldn't be lower than 0.1,
 % since ZVS bandwidth becomes too small)
-A_range = linspace(0.1,1,10);
+A_range = linspace(0.1,1,20);
 % DC input voltage range (unipolar peak) (if Vppeak is the param. to select around,
 % keep GT ~1, but optimal weight is usually achieved with tank gain of ~2)
 Vin_range = 5;
 % Peak of the output voltage that one hope to achieve (V)
 % peak to peak is 2x this value
-Vo_range = 20;
+Vo_range = 50;
 % Output power desired (W)
-Po_range = 5;
+Po_range = 10;
 % Turns ratio secondary/primary
-K_range = 1:1:5;
+K_range = 1:1:10;
 
 % Insulation
 %-------------------------------------------
@@ -148,7 +184,8 @@ dielectricstrength_insulation = 0.5 * 200e5;
 
 
 % Winding factor of litz wire, assuming only 80% of wire size is copper
-LitzFactor = 0.8;
+% (the rest is air and enamel between parallel wires)
+LitzFactor = 0.6;
 % Minimal wire diameter (m)
 MinWireDia = 0.25/1000; % AWG28, 0.35 mm is AWG29, 0.079 is AWG40
 % Max allowable current density in the wire (A/m^2)
@@ -245,6 +282,7 @@ GT = (4/pi)./(sqrt((1+A).^2.*(1-(fs_range./f0).^2).^2+1./Q.^2.*(fs_range./f0-A.*
 % Maximum current through resonant tank
 Imax = (Vin_range.*GT./RT).*sqrt(1+(fs_range./f0).^2.*Q.^2.*(A+1).^2);
 
+
 % If effective gain GT.*K is within 20% of required gain, the design is
 % acceptable. If not, index ignored. If all are ignored, error is thrown.
 KeepIndex = intersect(find(GT.*K>=Vo_range./Vin_range),find(GT.*K<=1.2*Vo_range./Vin_range));
@@ -280,6 +318,9 @@ for i = 1:length(Q)
     % Maximum insulation stress
     Vinsulation_max = Vsec;
 
+    % Parallel capacitive reactance
+    XCp = 1/(2.*pi.*fs_range.*Cp);
+
     % Run Xfmer design, return design vector. All CoreLoss and CoreSize
     % data is passed, along with primary voltage, secondary voltage, output
     % power goal, switching frequency goal, max insulation stress, and^
@@ -294,7 +335,7 @@ for i = 1:length(Q)
         dielectricstrength_insulation,etaXfmer,TmaxX,TminX,MinPriWindingX, ...
         MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
         BSAT_discountX,CoreLossMultipleX,maxpackingfactorX,minpackingfactorX, ...
-        LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0);
+        LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0,XCp);
     
     % Run Inductor design, return design table. All CoreLoss and CoreSize
     % data is passed, along with input voltage range (DC), output power
@@ -353,10 +394,10 @@ XfmerDesignTable = cell2table(XfmerDesignCellArr,'VariableNames',{'Po_W','Vppeak
     'WireSec_per_layer', 'WireSec_Nlayer','Ns1','Ns2','Ns3','Ns4','CopperPackingFactor',...
     'PackingFactor', 'LossCore_W','LossCopper_W' , 'WeightCore_g','WeightPri_copper_g',...
     'WeightPri_Insu_g', 'WeightSec_copper_g', 'WeightSec_Insu_g', 'WeightCore_Insu_g',...
-    'TotalWeight_g', 'TempAbsolute_C','Core Geometry','Volume_m^3'});
+    'TotalWeight_g', 'TempAbsolute_C','Core Geometry','Volume_m^3','Magnetizing Inductance_H', ...
+    'Leakage Inductance_H','Primary strand diameter_AWG','Secondary strand diameter_AWG'});
 
-
-
+writetable(XfmerDesignTable,filename_xfmer,'Sheet',ResultDatasheetname);
 % Results are written to excel file and sheet
 xcelX = readcell(filename_xfmer,'Sheet',ResultDatasheetname);
 [row,col] = size(xcelX);
@@ -365,6 +406,11 @@ writetable(XfmerDesignTable,filename_xfmer,'Sheet',ResultDatasheetname);
 
 if size(XfmerDesignTable,1)>=2
     weightX = XfmerDesignTable{2,36};
+    % derive magnetizing and leakage inductance estimates here, print it.
+    Lmag = XfmerDesignTable{2,40};
+    Lleakage = XfmerDesignTable{2,41};
+    fprintf("Real magnetizing inductance is about %.3f uH",Lmag*1000000);
+    fprintf("Real leakage inductance is about %.3f uH",Lleakage*1000000);
 else
     weightX = 0;
 end
@@ -395,12 +441,12 @@ InductorDesignTable = cell2table(InductorDesignCellArr,'VariableNames',{'PoW','V
     'CopperPackingFactor', 'PackingFactor','LossCore_W',...
     'LossCopper_W','WeightCore_g', 'WeightPri_copper_g','WeightPri_Insu_g',...
     'WeightCore_Insu_g','TotalWeight_g','TempAbsolute_C','L', 'airgap_m', 'Core Geometry',...
-    'Q','f0', 'A', 'K', 'RT', 'Ls', 'Cs', 'Cp', 'GT','Volume_m^3'});
+    'Q','f0', 'A', 'K', 'RT', 'Ls', 'Cs', 'Cp', 'GT','Volume_m^3','Strand diameter_AWG'});
 
+writetable(InductorDesignTable,filename_inductor,'Sheet',ResultDatasheetname);
 xcelL = readcell(filename_inductor,'Sheet',ResultDatasheetname);
 [row,col] = size(xcelL);
 writecell(repmat({''},row,col),filename_inductor,'Sheet',ResultDatasheetname);
-
 writetable(InductorDesignTable,filename_inductor,'Sheet',ResultDatasheetname);
 
 if size(InductorDesignTable,1)>=2
