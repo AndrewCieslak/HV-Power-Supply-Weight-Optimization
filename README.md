@@ -113,15 +113,15 @@ You need to collect geometry and size data, as well as material-specific data.
 
 Parameter meanings:
 
- PriW = primary winding width
- PriH = primary winding height
- SecW = secondary winding width
- SecH = secondary winding height
+ - PriW = primary winding width
+ - PriH = primary winding height
+ - SecW = secondary winding width
+ - SecH = secondary winding height
 
 Dimensional references:
- Lc = center-leg width
- T = core thickness (used for EE or U cores)
- rAc = equivalent core radius (used for ER or UR cores)
+ - Lc = center-leg width
+ - T = core thickness (used for EE or U cores)
+ - rAc = equivalent core radius (used for ER or UR cores)
 
 For geometry: You need geometries with known dimensions
 You need:
