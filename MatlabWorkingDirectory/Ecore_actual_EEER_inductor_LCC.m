@@ -5,7 +5,7 @@ function y = Ecore_actual_EEER_inductor_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6, .
     CoreInsulationDensity,WireInsulationDensity,dielectricstrength_insulation,...
     etaInductor,TmaxL,TminL,MaxWeightL,mingap,MinWindingL,MaxWindingL,IncreNL, ...
     MaxMlL,IncreMlL,BSAT_discountL,CoreLossMultipleL,maxpackingfactorL,minpackingfactorL,CuMultL, ...
-    LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0)
+    LitzFactor,MinWireDia,Jwmax,MinLitzStrandDia,CopperDensity,rou,u0,minLitzStrands)
 
 
 
@@ -210,8 +210,8 @@ KeepIndex = intersect(KeepAirGap, Keep_Bmindex);
 
 % Debug
 if isempty(KeepIndex)
-    warning('No Successful Indexes');
-    y = zeros(1,37);
+    warning('No Successful Core Indexes');
+    y = zeros(1,38);
     return;
 end
 
@@ -297,8 +297,8 @@ alpha = nonzeros(reshape(alpha(UniqueRowIdcs,:)',[],1));
 % -------------------------------------------------------------------
 
 if (isempty(Po))
-    warning('No successful inductor results Test1, Inductor.');
-    y = 0;
+    warning('Inductor Failed Material Check');
+    y = zeros(38);
 else
 
 
@@ -324,21 +324,27 @@ else
     Iprms=Imax./sqrt(2);
     % AC skin depth
     skindepth=1./sqrt(pi.*fs.*u0./rou);
-    % Area required of wire m^2
+
+    % Required Copper Cross-Section
     Areq_p=CuMultL.*Iprms./Jwmax;
-    % solid equivalent diameter
+
+    % Required Copper Diameter
     dsolid=2.*sqrt(Areq_p./pi);
-    % Solid vs. litz
+
+    % Solid Core Choice
     useSolid=dsolid<=2.*skindepth;
-    % Litz diameter
-    dstrand_litz=max(MinLitzDia,2.*skindepth);
-    % strand cross section area
+
+    % Litz Strand Diameter
+    dstrand_litz=max(MinLitzStrandDia,2.*skindepth);
+
+    % Litz strand cross-sectional area
     Astrand=pi.*(dstrand_litz./2).^2;
-    % Number of strands default to 1
+
+    % Number of strands needed
     Pri_Nstrands=ones(size(Iprms));
-    % Where not solid, use litz number of strands
-    Pri_Nstrands(~useSolid)=ceil(Areq_p(~useSolid)./Astrand(~useSolid));
-    % use solid diameter if solid, bundle diameter if litz
+    Pri_Nstrands(~useSolid)=max(minLitzStrands,ceil(Areq_p(~useSolid)./Astrand(~useSolid)));
+
+    % Wire uninsulated diameter
     Pri_WireDia=max(MinWireDia,dsolid);
     idLitz=~useSolid;
     if any(idLitz)
@@ -348,16 +354,16 @@ else
     % Strand diameter
     Pri_ds=max(MinWireDia,dsolid);
     Pri_ds(idLitz)=dstrand_litz(idLitz);
-    % Full wire size with insulation
+
+    % Wire Insulated Diameter
     Pri_FullWireDia=Pri_WireDia+2.*Vpri./dielectricstrength_insulation;
     if layerTapeUse
         Pri_FullWireDia = Pri_WireDia + enamelThickness.*2;
     end
 
-    A_pri_cu=(pi.*(Pri_WireDia.^2))./4;
-    A_pri_full=(pi.*(Pri_FullWireDia.^2))./4;
+    CopperPacking=(Areq_p.*Np)./(H.*W);
 
-    CopperPacking=(A_pri_cu.*Np)./(H.*W);
+    A_pri_full=(pi.*(Pri_FullWireDia.^2))./4;
     OverallPacking=(A_pri_full.*Np)./(H.*W);
 
     CoreInsulationThickness=Vpri./dielectricstrength_insulation;
@@ -508,7 +514,7 @@ else
     B_index = find(Bm < BSAT*BSAT_discountL);
     [Bmin,BminIndex] = min(Bm);
         
-    % Filter by Temperature and Power Loss
+    % Filter by Temperature and Efficiency
     P_loss_index = find(Pcopper + Pcore <= Po./etaInductor - Po);
     Tafterloss_index = find(Tafterloss <= TmaxL);
     Tmin_index = find(Tafterloss >= TminL);
@@ -542,42 +548,42 @@ else
     [PriPerLayerMax,PPLMaxIndex] = max(Pri_PerLayer.*Pri_FullWireDia);
 
     if isempty(P_loss_index)
-        fprintf("Inductor Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d",Pmin,PminValIndex);
+        fprintf("Inductor Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d \n",Pmin,PminValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(Tafterloss_index)
-        fprintf("Inductor Bottlenecked. Min T out of all candidates: %.2f Index: %d",Tminimum,TminValIndex);
+        fprintf("Inductor Bottlenecked. Min T out of all candidates: %.2f Index: %d \n",Tminimum,TminValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(B_index)
-        fprintf("Inductor Bottlenecked. Min B out of all candidates: %.2f Index: %d",Bmin,BminIndex);
+        fprintf("Inductor Bottlenecked. Min B out of all candidates: %.2f Index: %d \n",Bmin,BminIndex);
         y = zeros(1,38);
         return
     end
     if isempty(TotalWeight_index)
-        fprintf("Inductor Bottlenecked. Min Weight out of all candidates: %.2f Index: %d",WMin,WminValIndex);
+        fprintf("Inductor Bottlenecked. Min Weight out of all candidates: %.2f Index: %d \n",WMin,WminValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(OverallPackingmin_index)
-        fprintf("Inductor Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d",PackingMin,PackingMinValIndex);
+        fprintf("Inductor Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d \n",PackingMin,PackingMinValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(OverallPackingmax_index)
-        fprintf("Inductor Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d",PackingMax,PackingMaxValIndex);
+        fprintf("Inductor Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d \n",PackingMax,PackingMaxValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(Mlp_index)
-        fprintf("Inductor Bottlenecked. Max layers width of all candidates: %.2f Index: %d",MlpMax,MlpMaxValIndex);
+        fprintf("Inductor Bottlenecked. Max layers width of all candidates: %.2f Index: %d \n",MlpMax,MlpMaxValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(Pri_PerLayer_index)
-        fprintf("Inductor Bottlenecked. Max layer height out of all candidates: %.2f Index: %d",PriPerLayerMax,PPLMaxIndex);
+        fprintf("Inductor Bottlenecked. Max layer height out of all candidates: %.2f Index: %d \n",PriPerLayerMax,PPLMaxIndex);
         y = zeros(1,38);
         return
     end
@@ -597,9 +603,9 @@ else
     %% -----------------------------------------------------------------------------
 
     % Keep only the lightest design
-    [~, SortIndex] = sort(TotalWeight(Index_Meet_All));
-    if ~isempty(SortIndex)
-        TotalWeightSortIndex = Index_Meet_All(SortIndex(1));
+    if ~isempty(Index_Meet_All)
+        TotalWeightSortIndex = Index_Meet_All;
+        
         Volume = Ve(TotalWeightSortIndex) ...
            + WeightPri_copper(TotalWeightSortIndex)./CopperDensity ...
            + WeightPri_Insu(TotalWeightSortIndex)./WireInsulationDensity ...
@@ -612,7 +618,7 @@ else
         Pri_StrandAWG = -39*log(Pri_StrandDiaMM./0.127)./log(92)+36;
 
         % Preallocate Design_inductor
-        Design_inductor = zeros(numel(TotalWeightSortIndex), 37);
+        Design_inductor = zeros(numel(TotalWeightSortIndex), 38);
 
         Design_inductor(:, 1)  = Po(TotalWeightSortIndex);
         Design_inductor(:, 2)  = Vin(TotalWeightSortIndex);
@@ -657,7 +663,7 @@ else
         y = Design_inductor;
     else
         y = zeros(1,38);
-        warning('No successful results Test2, Inductor');
+        warning('Inductor Failed');
     end
 end
 %toc
