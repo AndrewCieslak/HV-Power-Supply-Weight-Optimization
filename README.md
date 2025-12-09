@@ -38,6 +38,7 @@ negligible
 - Multiple core densities can be used in candidate design sweep
 - Interlayer tape layout option was added.
 - Datasheet accurate coresizedata was added.
+- I added a bottleneck design checker, taking the top 20 designs and seeing if 50% or more have the same variable value for a variable with a nonzero range that was fixed in the input parameters. This helps determine if the weight is realistic or if some range just needs to be expanded.
 
 ## RTC Script:
 - Works
@@ -102,8 +103,6 @@ extend runtime, but would make user interfacing a lot easier.
 
 2. If your variables are too restrictive for your data, you will get a table with
 no values, as no set of variables match your requirements
-
-3. When running the script, if the weight seems implausibly high, check the results table for both inductor and transformer, and observe if any of the values in the table approach the bounds of the parameter ranges. If they do, expand those ranges. Often, expanding those ranges allows for more optimized cores. Once each of the parameters is in a good band within its range, the optimal design can be certain to have been achieved.
 
 ## Data formatting:
 
