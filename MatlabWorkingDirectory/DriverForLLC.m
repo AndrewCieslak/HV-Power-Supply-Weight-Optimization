@@ -1,8 +1,10 @@
 clc, clf, clear
 
-corelossfile = 'CoreLossDataOLD.xlsx';
+global ResultX ResultL
+
+corelossfile = 'CoreLossData.xlsx';
 coresizefile = 'CoreSizeData.xlsx';
-coresizeSheetname = 'OwnedCores';
+coresizeSheetname = 'Ecore';
 
 raw1 = readcell(corelossfile,'Sheet','Freq');
 raw2 = readcell(corelossfile,'Sheet','Bfield');
@@ -17,6 +19,13 @@ raw = readcell(coresizefile,'Sheet',coresizeSheetname);
 
 %% Parameters to Adjust
 %--------------------------------------------------------------------------
+
+% It seems to me actually that the B-CL curve extrapolation done in both
+% magnetics scripts is actually finding the slope of the B-CL line and not
+% the hysteresis line, like I had assumed before. Since the B-CL curve line
+% is much more linear, the assumption actually holds pretty accurate.
+% Better than I had thought.
+% 12/4
 
 % Magnetizing inductance is assumed "large enough" as explained in the
 % thesis, with A being the capacitance parallel vs. series ratio i.e.
@@ -60,25 +69,25 @@ raw = readcell(coresizefile,'Sheet',coresizeSheetname);
 
 Date = '11-13-25';
 % Quality factor
-Q_range = 0.2:0.1:1;
+Q_range = 0.4:0.1:0.8;
 % Resonant frequency
-f0_range = 25000;
+f0_range = 3000;
 % frequency of the transformer
 fs_range = f0_range;
 
 % Capacitance ratio (inverse of inductance ratio) (shouldn't be lower than 0.1,
 % since ZVS bandwidth becomes too small)
-A_range = linspace(0.1,1,20);
+A_range = linspace(0.1,1,10);
 % DC input voltage range (unipolar peak) (if Vppeak is the param. to select around,
 % keep GT ~1, but optimal weight is usually achieved with tank gain of ~2)
-Vin_range = 5;
+Vin_range = 300;
 % Peak of the output voltage that one hope to achieve (V)
 % peak to peak is 2x this value
-Vo_range = 50;
+Vo_range = 1e4;
 % Output power desired (W)
-Po_range = 10;
+Po_range = 900;
 % Turns ratio secondary/primary
-K_range = 1:1:10;
+K_range = 1:1:35;
 
 % Insulation
 %-------------------------------------------
@@ -102,7 +111,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
 %-------------------------------------------
 
     % Lowest allowed inductor efficiency
-    etaInductor = 0.98;
+    etaInductor = 0.80;
     % Max allowable temperature (C)
     TmaxL = 100;
     % Min allowable temperature (C)
@@ -130,7 +139,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
     IncreMlL = 1;
 
     % Copper wire multiple to reduce resistive losses
-    CuMultL = 1;
+    CuMultL = 1.1;
     
     % Discount factors
     %----------------------------------------
@@ -149,7 +158,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
 %-------------------------------------------
     
     % Minimum transformer efficiency
-    etaXfmer = 0.95;
+    etaXfmer = 0.80;
     % Max operating temp in Celsius
     TmaxX = 100;
     % Min operating temp in Celsius
@@ -165,11 +174,14 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Incremental layer of primary winding
     IncreMlpX = 1;
     % Maximum layer of secondary winding
-    MaxMlsX = 25;
+    MaxMlsX = 30;
     % Incremental layer of secondary winding
     IncreMlsX = 1;
     % Max allowable transformer weight (g)
     MaxWeightX = 1000;
+
+    % Winding Wire Copper Multiple to Decrease Copper Loss
+    CuMultX = 1.2;
 
     % Deratings
     %------------------------------------------
@@ -185,15 +197,18 @@ dielectricstrength_insulation = 0.5 * 200e5;
 
 % Winding factor of litz wire, assuming only 80% of wire size is copper
 % (the rest is air and enamel between parallel wires)
-LitzFactor = 0.6;
+LitzFactor = 0.75;
 % Minimal wire diameter (m)
 MinWireDia = 0.25/1000; % AWG28, 0.35 mm is AWG29, 0.079 is AWG40
 % Max allowable current density in the wire (A/m^2)
 % 500A/cm^2 is the upper bound recommended, but without active cooling, and
 % since the magnetics are thermally insulated, less is assumed
 Jwmax = 3e6;
+% Minimum number of bundled strands per wire (paralleling magnet wires i.e.
+% making custom Litz wire can be done for nonstandard strand amounts)
+minLitzStrands = 1;
 % Minimal litz diameter one can get (m)
-MinLitzDia = 0.05024 / 1000; % AWG44 % 0.0316 is AWG48, 0.03983 is AWG46
+MinLitzStrandDia = 0.05024 / 1000; % AWG44 % 0.0316 is AWG48, 0.03983 is AWG46
 % g/m^3, density of copper
 CopperDensity = 8.96*1000*1000;
 % Electrical constants. Normally there is no need to change
@@ -221,6 +236,8 @@ filename_inductor = strcat(Date,'_','Inductor.xlsx');
 SheetNumber = 1;
 Infosheetname = strcat('SimInfo', num2str(SheetNumber));
 ResultDatasheetname = strcat('ResultsData', num2str(SheetNumber));
+ResultX = zeros(1,43);
+ResultL = zeros(1,38);
 
 field1 = 'name';
 value1_req = {'Date','Hypothesis','Notes',...
@@ -335,7 +352,8 @@ for i = 1:length(Q)
         dielectricstrength_insulation,etaXfmer,TmaxX,TminX,MinPriWindingX, ...
         MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
         BSAT_discountX,CoreLossMultipleX,maxpackingfactorX,minpackingfactorX, ...
-        LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0,XCp);
+        LitzFactor,MinWireDia,Jwmax,MinLitzStrandDia,CopperDensity,rou,u0,XCp, ...
+        minLitzStrands,CuMultX);
     
     % Run Inductor design, return design table. All CoreLoss and CoreSize
     % data is passed, along with input voltage range (DC), output power
@@ -349,11 +367,15 @@ for i = 1:length(Q)
         dielectricstrength_insulation,etaInductor,TmaxL,TminL,MaxWeightL,mingap, ...
         MinWindingL,MaxWindingL,IncreNL,MaxMlL,IncreMlL,BSAT_discountL, ...
         CoreLossMultipleL,maxpackingfactorL,minpackingfactorL,CuMultL,...
-        LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0);
-    
-    % Successful result vector of many columns and 1 row for transformer and inductor are saved
-    ResultX(i,:) = SuceedX;
-    ResultL(i,:) = SuceedL;
+        LitzFactor,MinWireDia,Jwmax,MinLitzStrandDia,CopperDensity,rou,u0,minLitzStrands);
+   
+    % Successful result vector of many columns and rows for transformer and inductor are saved
+    for d = 1:length(SuceedX(:,1))
+        ResultX(end+1,:) = SuceedX(d,:);
+    end
+    for s = 1:length(SuceedL(:,1))
+        ResultL(end+1,:) = SuceedL(s,:);
+    end
     % Sliced variables in parallel loops allow this ResultX and ResultL to exist outside the
     % parfor loop.
 
@@ -364,12 +386,96 @@ for i = 1:length(Q)
 end
 toc
 
+
+
 % Results output
 %-------------------------------------------
 
 % Deletes rows of zeros, and then sorts by weight
 XfmerDesignArray = ResultX(~all(ResultX == 0, 2), :);
 XfmerDesignArray = sortrows(XfmerDesignArray,36,'ascend');
+
+% Checks values of successful inputs to see if they are suspiciously close
+% to the bounds of the input ranges. If so, that value is likely a
+% bottleneck.
+
+% Transformer Design Checker
+% Checks the best 20 rows
+if size(XfmerDesignArray)>1
+    nTopX = min(20,size(XfmerDesignArray,1));
+    bottleneckCheckX = XfmerDesignArray(1:nTopX,:);
+    
+    Pbase    = bottleneckCheckX(:,1);    % base power (used in efficiency)
+    Pcu      = bottleneckCheckX(:,28);   % copper loss
+    Pcore    = bottleneckCheckX(:,29);   % core loss
+    eta_des  = (Pbase - (Pcu + Pcore)) ./ Pbase;   % final design efficiency
+    T_des    = bottleneckCheckX(:,37);   % final design temperature
+    Np       = bottleneckCheckX(:,7);    % primary turns
+    Nlp      = bottleneckCheckX(:,19);   % primary layers
+    Nls      = bottleneckCheckX(:,21);   % secondary layers
+    Weight   = bottleneckCheckX(:,36);   % total transformer weight
+    Packing  = bottleneckCheckX(:,27);   % packing factor
+    PriAWG   = bottleneckCheckX(:,10);   % primary wire gauge (AWG)
+    PriDia_m = 0.0254.*(0.005 .* 92.^((36 - PriAWG)./39));
+    Jpri     = bottleneckCheckX(:,14);   % primary current density
+    Jsec     = bottleneckCheckX(:,15);   % secondary current density
+    NstrPri  = bottleneckCheckX(:,16);   % primary Litz strand count
+    NstrSec  = bottleneckCheckX(:,17);   % secondary Litz strand count
+    TurnRatio = ceil(bottleneckCheckX(:,8)./Np);
+    
+    % 1) Efficiency vs etaXfmer
+    checkVarBottleneck(eta_des, etaXfmer, NaN, ...
+        'Efficiency (η)', nTopX/2, 0.02);
+    
+    % 2) Temperature vs TminX / TmaxX
+    checkVarBottleneck(T_des, TminX, TmaxX, ...
+        'Temperature T', nTopX/2, 2);
+    
+    % 3) Primary turns vs MinPriWindingX / MaxPriWindingX
+    checkVarBottleneck(Np, MinPriWindingX, MaxPriWindingX, ...
+        'Primary turns Np', nTopX/2, 5);
+    
+    % 4) Primary / secondary layer count vs MaxMlpX / MaxMlsX (upper bound only)
+    checkVarBottleneck(Nlp, NaN, MaxMlpX, ...
+        'Primary layers Nlp', nTopX/2, 1);
+    
+    checkVarBottleneck(Nls, NaN, MaxMlsX, ...
+        'Secondary layers Nls', nTopX/2, 1);
+    
+    % 5) Weight vs MaxWeightX
+    checkVarBottleneck(Weight, NaN, MaxWeightX, ...
+        'Transformer weight', nTopX/2, 10);
+    
+    % 6) Packing factor vs minpackingfactorX / maxpackingfactorX
+    checkVarBottleneck(Packing, minpackingfactorX, maxpackingfactorX, ...
+        'Packing factor', nTopX/2, 0.1);
+    
+    % 7) Primary wire diameter vs MinWireDia (lower bound only)
+    checkVarBottleneck(PriDia_m, MinWireDia, NaN, ...
+        'Primary wire diameter', nTopX/2, 1e-4);
+    
+    % 8) Current density vs Jwmax (upper bound only, for both windings)
+    checkVarBottleneck(Jpri, NaN, Jwmax, ...
+        'Primary current density Jpri', nTopX/2, 1e4);
+    
+    checkVarBottleneck(Jsec, NaN, Jwmax, ...
+        'Secondary current density Jsec', nTopX/2, 1e4);
+    
+    % 9) Litz strand counts vs minLitzStrands (lower bound only)
+    if minLitzStrands>1
+    checkVarBottleneck(NstrPri, minLitzStrands, NaN, ...
+        'Primary Litz strands', nTopX/2, 1);
+    end
+    
+    if minLitzStrands>1
+    checkVarBottleneck(NstrSec, minLitzStrands, NaN, ...
+        'Secondary Litz strands', nTopX/2, 1);
+    end
+
+    % 10) Turn Ratio
+    checkVarBottleneck(TurnRatio,K_range(1),K_range(numel(K_range)),...
+        'Turn Ratio N', nTopX/2, 1);
+end
 
 % Turns core geometry and material into their names from the sheet
 freqTable = readcell(corelossfile,'Sheet','Freq');
@@ -420,6 +526,55 @@ fprintf("Transformer Weight is %.2f g",weightX);
 InductorDesignArray = ResultL(~all(ResultL == 0, 2), :);
 InductorDesignArray = sortrows(InductorDesignArray,23,'ascend');
 
+if size(InductorDesignArray)>1
+    % Inductor Bottleneck Checking
+    
+    % Checks values of successful inputs to see if they are suspiciously close
+    % to the bounds of the input ranges. If so, that value is likely a
+    % bottleneck. Checks top 20 best rows.
+    nTopL = min(20,size(InductorDesignArray,1));
+    bottleneckCheckL = InductorDesignArray(1:nTopL,:);
+    
+    PbaseL   = bottleneckCheckL(:,1);
+    PcuL     = bottleneckCheckL(:,17);
+    PcoreL   = bottleneckCheckL(:,18);
+    etaL_des = (PbaseL - (PcuL + PcoreL)) ./ PbaseL;
+    TL       = bottleneckCheckL(:,24);
+    NturnsL  = bottleneckCheckL(:,7);
+    MlL      = bottleneckCheckL(:,14);
+    WeightL  = bottleneckCheckL(:,23);
+    PackingL = bottleneckCheckL(:,16);
+    WireAWG_L = bottleneckCheckL(:,9);
+    WireDia_L = 0.0254.*(0.005 .* 92.^((36 - WireAWG_L)./39));
+    J_L      = bottleneckCheckL(:,11);
+    Nstr_L   = bottleneckCheckL(:,12);
+    GapL     = bottleneckCheckL(:,26);
+    
+    checkVarBottleneck(etaL_des, etaInductor, NaN, ...
+        'Inductor efficiency (η)', nTopL/2, 0.02);
+    checkVarBottleneck(TL, TminL, TmaxL, ...
+        'Inductor temperature T', nTopL/2, 2);
+    checkVarBottleneck(NturnsL, MinWindingL, MaxWindingL, ...
+        'Inductor turns N', nTopL/2, 1);
+    checkVarBottleneck(MlL, NaN, MaxMlL, ...
+        'Inductor layers', nTopL/2, 1);
+    checkVarBottleneck(WeightL, NaN, MaxWeightL, ...
+        'Inductor weight', nTopL/2, 10);
+    checkVarBottleneck(PackingL, minpackingfactorL, maxpackingfactorL, ...
+        'Inductor packing factor', nTopL/2, 0.1);
+    checkVarBottleneck(WireDia_L, MinWireDia, NaN, ...
+        'Inductor wire diameter', nTopL/2, 1e-4);
+    checkVarBottleneck(J_L, NaN, Jwmax, ...
+        'Inductor current density J', nTopL/2, 1e4);
+    checkVarBottleneck(GapL, mingap, NaN, ...
+        'Inductor gap length', nTopL/2, 1e-4);
+    if minLitzStrands > 1
+        checkVarBottleneck(Nstr_L, minLitzStrands, NaN, ...
+            'Inductor Litz strands', nTopL/2, 1);
+    end
+end
+
+
 % Turns core geometry and material into their names from the sheet
 freqTableL = readcell(corelossfile,'Sheet','Freq');
 sizeTableL = readcell(coresizefile,'Sheet',coresizeSheetname);
@@ -455,3 +610,34 @@ else
     weightL = 0;
 end
 fprintf("Inductor Weight is %.2f g",weightL);
+
+
+
+
+function checkVarBottleneck(dataVec, minVal, maxVal, name, threshold, tol)
+%   dataVec : the 20 best rows
+%   minVal  : lower bound (NaN to ignore)
+%   maxVal  : upper bound (NaN to ignore)
+%   name    : descriptive name for printing
+%   threshold : # of designs at the bound to trigger a warning
+%   tol       : numerical tolerance
+
+    nTop = numel(dataVec);
+    if ~isnan(minVal)
+        nLower = sum(dataVec <= minVal+tol);
+        if nLower >= threshold
+            fprintf(['Possible bottleneck (LOWER): %s at bound %.5g ' ...
+                     'in %d / %d top designs. Consider relaxing the minimum.\n'], ...
+                     name, minVal, nLower, nTop);
+        end
+    end
+
+    if ~isnan(maxVal)
+        nUpper = sum(dataVec >= maxVal-tol);
+        if nUpper >= threshold
+            fprintf(['Possible bottleneck (UPPER): %s at bound %.5g ' ...
+                     'in %d / %d top designs. Consider relaxing the maximum.\n'], ...
+                     name, maxVal, nUpper, nTop);
+        end
+    end
+end
