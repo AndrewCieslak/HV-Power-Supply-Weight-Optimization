@@ -4,7 +4,7 @@ function y = Ecore_actual_EEER_xfmer_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6, ...
     MinTapeMargin,kaptonDensity,CoreInsulationDensity,WireInsulationDensity,dielectricstrength_insulation, ...
     etaXfmer,TmaxX,TminX,MinPriWindingX,MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
     BSAT_discountX,CoreLossMultipleX,maxpackingfactorX,minpackingfactorX,LitzFactor,MinWireDia,...
-    Jwmax,MinLitzDia,CopperDensity,rou,u0,XCp)
+    Jwmax,MinLitzStrandDia,CopperDensity,rou,u0,XCp,minLitzStrands,CuMultX)
 
 % Body of function
 %% --------------------------------------------------------------------------------------
@@ -24,13 +24,13 @@ for i = 1:NoMat
     prow = XCorePloss(i,  ~isnan(XCorePloss(i,:)));
 
     if mod(numel(frow),2) ~= 0
-        error('Data:OddFreqPairs','Material row %d has an odd count of frequency entries; must be pairs.', i);
+        error('Data:OddFreqPairs','Material row %d has an odd count of frequency entries; must be pairs. \n', i);
     end
     if numel(brow) ~= numel(prow)
-        error('Data:BPMismatch','Material row %d has %d B entries but %d Ploss entries.', i, numel(brow), numel(prow));
+        error('Data:BPMismatch','Material row %d has %d B entries but %d Ploss entries. \n', i, numel(brow), numel(prow));
     end
     if numel(brow) ~= numel(frow)
-        error('Data:FreqBPLength','Material row %d: Freq cols (%d) must equal B/Ploss cols (%d).', ...
+        error('Data:FreqBPLength','Material row %d: Freq cols (%d) must equal B/Ploss cols (%d). \n', ...
               i, numel(frow), numel(brow));
     end
 end
@@ -201,7 +201,7 @@ if isempty(Po)
     fprintf('BSAT*0.75 range: %.3f .. %.3f T\n', min(BSAT*BSAT_discountX), max(BSAT*BSAT_discountX));
     warning(['Empty. Every candidate design violates the B-SAT screening.' ...
         'Increase transformer geometry size (likely), or Increase Np range, ' ...
-        'or loosen other ranges, or ensure units match. Try again']);
+        'or loosen other ranges, or ensure units match. Try again \n']);
     y=0;
     return;
 end
@@ -235,7 +235,7 @@ ColDuplicate = sum(matfs(UniqueRowIdcs,:)~=0,2);
 if isempty(rowIdcs)
     warning('CoreLoss:NoUsableColumns', ...
           ['No datasheet loss columns within ±20% of fs=%g Hz for any selected material.\n' ...
-           'Check CoreLossData.xlsx sheets: Freq/Bfield/Ploss pairs and fs_range.'], fs_range);
+           'Check CoreLossData.xlsx sheets: Freq/Bfield/Ploss pairs and fs_range. \n'], fs_range);
     y=0;
     return;
 end
@@ -319,58 +319,69 @@ else
 
     Pcore = CoreLossMultipleX.*Ve.*K1.*fs.^alpha.*Bm.^beta;
 
-    % Determine wire type, and num of strands if Litz
+    % Determine wire type, and num of strands if Litz/Parallel
     % -----------------------------------------------
 
-    Areq_p=Iprms./Jwmax;                                % [m^2]
-    Areq_s=Isrms./Jwmax;                                % [m^2]
+    % Required Copper Cross-Section
+    Areq_p=CuMultX.*Iprms./Jwmax;                                % [m^2]
+    Areq_s=CuMultX.*Isrms./Jwmax;                                % [m^2]
     
-    dsolid_p=2.*sqrt(Areq_p./pi);                       % [m]
+    % Required Total Copper Diameter
+    dsolid_p=max(MinWireDia,2.*sqrt(Areq_p./pi));                       % [m]
     dsolid_s=max(MinWireDia,2.*sqrt(Areq_s./pi));                       % [m]
     
+    % Solid-Core Choice
     useSolid_p=(dsolid_p<=2.*skindepth);
     useSolid_s=(dsolid_s<=2.*skindepth);
     
-    % Computes for skindepth but not DC resistance...
-    MinLitzDia = MinLitzDia*ones(length(skindepth),1);
-    dstrandMinlitz=max(MinLitzDia,2.*skindepth);          % [m]
+    % Required Strand Copper Diameter & Cross-Section
+    MinLitzStrandDia_vec = MinLitzStrandDia*ones(length(skindepth),1);
+    dstrandMinlitz=max(MinLitzStrandDia_vec,2.*skindepth);          % [m]
     Astrand=pi.*(dstrandMinlitz./2).^2;                   % [m^2]
     
-    % Primary wire diameter, number of strands, and jacket+wire diameter
-    % ----------------
+    % Primary
+    % -------
 
+    % Primary wire number of strands
     Pri_Nstrands=ones(size(Iprms));
-    Pri_Nstrands(~useSolid_p)=ceil(Areq_p(~useSolid_p)./Astrand(~useSolid_p));
+    Pri_Nstrands(~useSolid_p)=max(minLitzStrands,ceil(Areq_p(~useSolid_p)./Astrand(~useSolid_p)));
 
+    % Primary wire uninsulated diameter
     Pri_WireDia=max(MinWireDia,dsolid_p);
     idx=~useSolid_p;
     if any(idx)
         Pri_WireDia(idx)=2.*sqrt(Pri_Nstrands(idx).*Astrand(idx).*LitzFactor./pi);
     end
-    % Strand diameter
+
+    % Primary wire strand diameter
     Pri_ds=max(MinWireDia,dsolid_p);
     Pri_ds(idx)=dstrandMinlitz(idx);
 
+    % Wire Jacket or Magnet Enamel (if using layer tape)
     Pri_FullWireDia = Pri_WireDia + 2.*Vppeak./dielectricstrength_insulation;
     if layerTapeUse
         Pri_FullWireDia = Pri_WireDia + enamelThickness.*2;
     end
 
-    % Secondary wire diameter, number of strands, and jacket+wire diameter
-    % ----------------
+    % Secondary
+    % ---------
 
+    % Secondary wire number of strands
     Sec_Nstrands=ones(size(Isrms));
-    Sec_Nstrands(~useSolid_s)=ceil(Areq_s(~useSolid_s)./Astrand(~useSolid_s));
+    Sec_Nstrands(~useSolid_s)=max(minLitzStrands,ceil(Areq_s(~useSolid_s)./Astrand(~useSolid_s)));
+
+    % Secondary wire uninsulated diameter
     Sec_WireDia=max(MinWireDia,dsolid_s);
     idx=~useSolid_s;
     if any(idx)
         Sec_WireDia(idx)=2.*sqrt(Sec_Nstrands(idx).*Astrand(idx).*LitzFactor./pi);
     end
-    % Strand diameter
+
+    % Secondary wire strand diameter
     Sec_ds=max(MinWireDia,dsolid_s);
     Sec_ds(idx)=dstrandMinlitz(idx);
 
-    % Changed vsp/die to have 2* factor like pri, then reverted.
+    % Wire Jacket or Magnet Enamel (if using layer tape)
     Sec_FullWireDia = Sec_WireDia + Vspeak./dielectricstrength_insulation;
     if layerTapeUse
         Sec_FullWireDia = Sec_WireDia + enamelThickness.*2;
@@ -693,32 +704,32 @@ else
     [PackingMax,PackingMaxValIndex] = min(OverallPacking);
 
     if isempty(P_loss_index)
-        fprintf("Transformer Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d",Pmin,PminValIndex);
+        fprintf("Transformer Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d \n",Pmin,PminValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(Tafterloss_index)
-        fprintf("Transformer Bottlenecked. Min T out of all candidates: %.2f Index: %d",Tminimum,TminValIndex);
+        fprintf("Transformer Bottlenecked. Min T out of all candidates: %.2f Index: %d \n",Tminimum,TminValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(B_index)
-        fprintf("Transformer Bottlenecked. Min B out of all candidates: %.2f Index: %d",Bmin,BminIndex);
+        fprintf("Transformer Bottlenecked. Min B out of all candidates: %.2f Index: %d \n",Bmin,BminIndex);
         y = zeros(1,43);
         return
     end
     if isempty(TotalWeight_index)
-        fprintf("Transformer Bottlenecked. Min Weight out of all candidates: %.2f Index: %d",WMin,WminValIndex);
+        fprintf("Transformer Bottlenecked. Min Weight out of all candidates: %.2f Index: %d \n",WMin,WminValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(OverallPackingmin_index)
-        fprintf("Transformer Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d",PackingMin,PackingMinValIndex);
+        fprintf("Transformer Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d \n",PackingMin,PackingMinValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(OverallPackingmax_index)
-        fprintf("Transformer Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d",PackingMax,PackingMaxValIndex);
+        fprintf("Transformer Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d \n",PackingMax,PackingMaxValIndex);
         y = zeros(1,43);
         return
     end
@@ -793,8 +804,8 @@ else
     WindowFit_index = find(meetsWindowFitConstraints);
 
     if isempty(WindowFit_index)
-        fprintf("Transformer Bottlenecked. Max window area");
-        y = zeros(1,41);
+        fprintf("Transformer Bottlenecked. Max window area \n");
+        y = zeros(1,43);
         return
     end
 
@@ -814,9 +825,9 @@ else
     
     % Build Results Table 
     %% -----------------------------------------------------------------------------
-    [~, SortIndex] = sort(TotalWeight(Index_Meet_All));
-    if(length(SortIndex) >= 1)
-        TotalWeightSortIndex = Index_Meet_All(SortIndex(1));
+
+    if(length(Index_Meet_All) >= 1)
+        TotalWeightSortIndex = Index_Meet_All;
 
         V_cu     = ((WeightPri_copper+WeightSec_copper))/CopperDensity;
         V_insu   = ((WeightCore_Insu+WeightPri_Insu+WeightSec_Insu))/CoreInsulationDensity;
@@ -882,7 +893,7 @@ else
         y = Design;
     else
         y = zeros(1,43);
-        disp('Requirements not met. Filtered indexes == 0');
+        warning('Transformer Failed');
     end
 end
 end
