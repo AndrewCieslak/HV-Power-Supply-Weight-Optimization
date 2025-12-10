@@ -4,7 +4,7 @@ global ResultX ResultL
 
 corelossfile = 'CoreLossData.xlsx';
 coresizefile = 'CoreSizeData.xlsx';
-coresizeSheetname = 'OwnedCores';
+coresizeSheetname = 'Ecore';
 
 raw1 = readcell(corelossfile,'Sheet','Freq');
 raw2 = readcell(corelossfile,'Sheet','Bfield');
@@ -73,15 +73,15 @@ raw = readcell(coresizefile,'Sheet',coresizeSheetname);
 
 Date = '11-13-25';
 % Quality factor
-Q_range = linspace(0.75,0.85,4);
+Q_range = 0.9;
 % Resonant frequency
 f0_range = 200000;
 % frequency of the transformer
-fs_range = f0_range;
+fs_range = 200000;
 
 % Capacitance ratio (inverse of inductance ratio) (shouldn't be lower than 0.1,
 % since ZVS bandwidth becomes too small)
-A_range = linspace(0.01,0.1,10);
+A_range = 0.1;
 % DC input voltage range (unipolar peak) (if Vppeak is the param. to select around,
 % keep GT ~1, but optimal weight is usually achieved with tank gain of ~2)
 Vin_range = 100;
@@ -91,7 +91,7 @@ Vo_range = 1e4;
 % Output power desired (W)
 Po_range = 100;
 % Turns ratio secondary/primary
-K_range = 90:1:110;
+K_range = 90;
 
 % Insulation
 %-------------------------------------------
@@ -277,11 +277,15 @@ writetable(T, filename_xfmer, 'Sheet', Infosheetname, 'WriteVariableNames', true
 % Creates 4-D array of these 4 ranges. Each output is the size of all 4
 % multiplied together. The reshape() just flattens each 4-D array into a
 % column vector (turns ?x?x?x? into 4?x1)
-[Q,f0,A,K] = ndgrid(Q_range, f0_range, A_range, K_range);
+[Q,f0,A,K,Vo,fs,Po,Vin] = ndgrid(Q_range, f0_range, A_range, K_range, Vo_range, fs_range, Po_range, Vin_range);
 Q = reshape(Q,[],1);
 f0 = reshape(f0,[],1);
 A = reshape(A,[],1);
 K = reshape(K,[],1);
+Vo = reshape(Vo,[],1);
+fs = reshape(fs,[],1);
+Po = reshape(Po,[],1);
+Vin = reshape(Vin,[],1);
 
 % All of the following calculations are computed for each element in the
 % matrix individually via the A.^B, A.*B, etc. operator. The sizes of A and B
@@ -289,7 +293,7 @@ K = reshape(K,[],1);
 % independent values to be computed in a compact format.
 
 % Equivalent resistance across secondary (from output p and output v)
-Req = (Vo_range./sqrt(2)).^2./Po_range;
+Req = (Vo./sqrt(2)).^2./Po;
 % Resonant tank reflected load resistance
 RT = Req./K.^2;
 % Series inductance of the resonant tank
@@ -299,14 +303,14 @@ Cs = Q.*(A+1)./(A*2*pi.*f0.*RT);
 % Parallel capacitance of LLC network
 Cp = Q.*(A+1)./(2*pi.*f0.*RT);
 % Transfer function gain factor; small-signal tank gain
-GT = (4/pi)./(sqrt((1+A).^2.*(1-(fs_range./f0).^2).^2+1./Q.^2.*(fs_range./f0-A.*f0./((A+1).*fs_range)).^2));
+GT = (4/pi)./(sqrt((1+A).^2.*(1-(fs./f0).^2).^2+1./Q.^2.*(fs./f0-A.*f0./((A+1).*fs)).^2));
 % Maximum current through resonant tank
-Imax = (Vin_range.*GT./RT).*sqrt(1+(fs_range./f0).^2.*Q.^2.*(A+1).^2);
+Imax = (Vin.*GT./RT).*sqrt(1+(fs./f0).^2.*Q.^2.*(A+1).^2);
 
 
 % If effective gain GT.*K is within 20% of required gain, the design is
 % acceptable. If not, index ignored. If all are ignored, error is thrown.
-KeepIndex = intersect(find(GT.*K>=Vo_range./Vin_range),find(GT.*K<=1.2*Vo_range./Vin_range));
+KeepIndex = intersect(find(GT.*K>=Vo./Vin),find(GT.*K<=1.2*Vo./Vin));
 KeepIndex = intersect(KeepIndex,find(GT > 1));
 if isempty(KeepIndex)
     error('Driver:NoCandidates', ...
@@ -314,7 +318,7 @@ if isempty(KeepIndex)
 end
 
 % Operating points not ignored are kept.
-Q=Q(KeepIndex);
+Q = Q(KeepIndex);
 f0 = f0(KeepIndex);
 A= A(KeepIndex);
 K= K(KeepIndex);
@@ -324,6 +328,10 @@ Cs = Cs(KeepIndex);
 Cp = Cp(KeepIndex);
 GT = GT(KeepIndex);
 Imax = Imax(KeepIndex);
+Vin = Vin(KeepIndex);
+Po = Po(KeepIndex);
+Vo = Vo(KeepIndex);
+fs = fs(KeepIndex);
 
 % Loops over every row of the 4-D grid, with tic-toc measuring total
 % runtime.
@@ -333,14 +341,14 @@ tic
 for i = 1:length(Q)
     
     % Peak voltage applied to primary from the input and resonant tank gain.
-    Vpri = Vin_range.*GT(i);
+    Vpri = Vin(i).*GT(i);
     % Peak output voltage on the transformer after turn ratio K
-    Vsec = Vin_range.*GT(i).*K(i);
+    Vsec = Vin(i).*GT(i).*K(i);
     % Maximum insulation stress
     Vinsulation_max = Vsec;
 
     % Parallel capacitive reactance
-    XCp = 1/(2.*pi.*fs_range.*Cp);
+    XCp = 1/(2.*pi.*fs.*Cp);
 
     % Run Xfmer design, return design vector. All CoreLoss and CoreSize
     % data is passed, along with primary voltage, secondary voltage, output
@@ -364,7 +372,7 @@ for i = 1:length(Q)
     % goal, switching frequency goal, winding pattern, and the resonant
     % tank sweep values.
     SuceedL = Ecore_actual_EEER_inductor_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6,...
-        Vin_range,GT(i),Po_range,fs_range,Ls(i),Imax(i), Winding_Pattern,...
+        Vin(i),GT(i),Po(i),fs(i),Ls(i),Imax(i), Winding_Pattern,...
         Q(i), f0(i), A(i), K(i), RT(i), Ls(i), Cs(i), Cp(i), GT(i), ...
         layerTapeUse,enamelThickness,kaptonDielStrength,kaptonThickness,...
         MinTapeMargin,kaptonDensity,CoreInsulationDensity,WireInsulationDensity, ...
@@ -376,13 +384,10 @@ for i = 1:length(Q)
     SuceedL = sortrows(SuceedL,23,'ascend');
     SuceedX = sortrows(SuceedX,36,'ascend');
    
-    % Successful result vector of 5 best rows for transformer and inductor are saved
-    for d = 1:5
-        ResultX(end+1,:) = SuceedX(d,:);
-    end
-    for s = 1:5
-        ResultL(end+1,:) = SuceedL(s,:);
-    end
+    % Successful result vector of the best row for transformer and inductor are saved
+    ResultX(end+1,:) = SuceedX(1,:);
+    ResultL(end+1,:) = SuceedL(1,:);
+
     % Sliced variables in parallel loops allow this ResultX and ResultL to exist outside the
     % parfor loop.
 
@@ -407,7 +412,7 @@ XfmerDesignArray = sortrows(XfmerDesignArray,36,'ascend');
 % bottleneck.
 
 % Transformer Design Checker
-% Checks the best 5 rows
+% Checks the best 20 rows
 if size(XfmerDesignArray)>1
     nTopX = min(20,size(XfmerDesignArray,1));
     bottleneckCheckX = XfmerDesignArray(1:nTopX,:);
@@ -433,10 +438,10 @@ if size(XfmerDesignArray)>1
     checkVarBottleneck(eta_des, etaXfmer, NaN, ...
         'Efficiency (η)', nTopX/2, 0.02);
     checkVarBottleneck(T_des, TminX, TmaxX, ...
-        'Temperature T', nTopX/2, 2);
+        'Temperature T', nTopX/2, 1);
     if MinPriWindingX>1
         checkVarBottleneck(Np, MinPriWindingX, MaxPriWindingX, ...
-            'Primary turns Np', nTopX/2, 5);
+            'Primary turns Np', nTopX/2, 1);
     end
     checkVarBottleneck(Nlp, NaN, MaxMlpX, ...
         'Primary layers Nlp', nTopX/2, 1);
@@ -460,15 +465,15 @@ if size(XfmerDesignArray)>1
     checkVarBottleneck(NstrSec, minLitzStrands, NaN, ...
         'Secondary Litz strands', nTopX/2, 1);
     end
+    if K_range(1)>1
     checkVarBottleneck(TurnRatio,K_range(1),K_range(end),...
         'Turn Ratio N (Transformer-Calculated)', nTopX/2, 1);
+    end
 end
 
 % Turns core geometry and material into their names from the sheet
-freqTable = readcell(corelossfile,'Sheet','Freq');
-sizeTable = readcell(coresizefile,'Sheet',coresizeSheetname);
-matNames = freqTable(2:end,2);
-geomNames = sizeTable(2:end,2);
+matNames = raw1(2:end,2);
+geomNames = raw(2:end,2);
 geomIndexes = XfmerDesignArray(1:end,38);
 matIndexes = XfmerDesignArray(1:end,5);
 fullmatNames = matNames(matIndexes);
@@ -490,11 +495,7 @@ XfmerDesignTable = cell2table(XfmerDesignCellArr,'VariableNames',{'Po_W','Vppeak
     'TotalWeight_g', 'TempAbsolute_C','Core Geometry','Volume_m^3','Magnetizing Inductance_H', ...
     'Leakage Inductance_H','Primary strand diameter_AWG','Secondary strand diameter_AWG'});
 
-writetable(XfmerDesignTable,filename_xfmer,'Sheet',ResultDatasheetname);
-% Results are written to excel file and sheet
-xcelX = readcell(filename_xfmer,'Sheet',ResultDatasheetname);
-[row,col] = size(xcelX);
-writecell(repmat({''},row,col),filename_xfmer,'Sheet',ResultDatasheetname);
+if exist(filename_xfmer,'file'); delete(filename_xfmer); end
 writetable(XfmerDesignTable,filename_xfmer,'Sheet',ResultDatasheetname);
 
 if size(XfmerDesignTable,1)>=2
@@ -540,16 +541,18 @@ if size(InductorDesignArray)>1
     Out_A = bottleneckCheckL(:,30);
     Out_K = bottleneckCheckL(:,31);
 
+    if K_range(1)>1
     checkVarBottleneck(Out_K,K_range(1),K_range(end), ...
         'Turn Ratio of Transformer (Inductor-Calculated)', nTopL/2, 1);
+    end
     checkVarBottleneck(Out_A, A_range(1), A_range(end), ...
         'Capacitance Ratio of Tank (A)', nTopL/2, 0.01);
     checkVarBottleneck(Out_Q, Q_range(1), Q_range(end), ...
-        'Quality Factor of Tank (Q)', nTopL/2, 0.1);
+        'Quality Factor of Tank (Q)', nTopL/2, 0.05);
     checkVarBottleneck(etaL_des, etaInductor, NaN, ...
         'Inductor efficiency (η)', nTopL/2, 0.02);
     checkVarBottleneck(TL, TminL, TmaxL, ...
-        'Inductor temperature T', nTopL/2, 2);
+        'Inductor temperature T', nTopL/2, 1);
     if MinWindingL>1
         checkVarBottleneck(NturnsL, MinWindingL, MaxWindingL, ...
             'Inductor turns N', nTopL/2, 1);
@@ -574,10 +577,8 @@ end
 
 
 % Turns core geometry and material into their names from the sheet
-freqTableL = readcell(corelossfile,'Sheet','Freq');
-sizeTableL = readcell(coresizefile,'Sheet',coresizeSheetname);
-matNamesL = freqTableL(2:end,2);
-geomNamesL = sizeTableL(2:end,2);
+matNamesL = raw1(2:end,2);
+geomNamesL = raw(2:end,2);
 geomIndexesL = InductorDesignArray(1:end,27);
 matIndexesL = InductorDesignArray(1:end,5);
 fullmatNamesL = matNamesL(matIndexesL);
@@ -596,10 +597,7 @@ InductorDesignTable = cell2table(InductorDesignCellArr,'VariableNames',{'PoW','V
     'WeightCore_Insu_g','TotalWeight_g','TempAbsolute_C','L', 'airgap_m', 'Core Geometry',...
     'Q','f0', 'A', 'K', 'RT', 'Ls', 'Cs', 'Cp', 'GT','Volume_m^3','Strand diameter_AWG'});
 
-writetable(InductorDesignTable,filename_inductor,'Sheet',ResultDatasheetname);
-xcelL = readcell(filename_inductor,'Sheet',ResultDatasheetname);
-[row,col] = size(xcelL);
-writecell(repmat({''},row,col),filename_inductor,'Sheet',ResultDatasheetname);
+if exist(filename_inductor,'file'); delete(filename_inductor); end
 writetable(InductorDesignTable,filename_inductor,'Sheet',ResultDatasheetname);
 
 if size(InductorDesignTable,1)>=2
@@ -608,8 +606,6 @@ else
     weightL = 0;
 end
 fprintf("Inductor Weight is %.2f g",weightL);
-
-
 
 
 function checkVarBottleneck(dataVec, minVal, maxVal, name, threshold, tol)
