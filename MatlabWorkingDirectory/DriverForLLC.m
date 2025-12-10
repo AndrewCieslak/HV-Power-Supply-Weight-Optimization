@@ -75,13 +75,13 @@ Date = '11-13-25';
 % Quality factor
 Q_range = 0.9;
 % Resonant frequency
-f0_range = 200000;
+f0_range = 3000;
 % frequency of the transformer
-fs_range = 200000;
+fs_range = 3100;
 
 % Capacitance ratio (inverse of inductance ratio) (shouldn't be lower than 0.1,
 % since ZVS bandwidth becomes too small)
-A_range = 0.1;
+A_range = [0.01,0.05];
 % DC input voltage range (unipolar peak) (if Vppeak is the param. to select around,
 % keep GT ~1, but optimal weight is usually achieved with tank gain of ~2)
 Vin_range = 100;
@@ -91,7 +91,7 @@ Vo_range = 1e4;
 % Output power desired (W)
 Po_range = 100;
 % Turns ratio secondary/primary
-K_range = 90;
+K_range = [90,95,100];
 
 % Insulation
 %-------------------------------------------
@@ -133,14 +133,14 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Maximum turns
     MaxWindingL = 100;
     % Incremental winding
-    IncreNL = 1;
+    IncreNL = 5;
     % Maximum layer of winding
     MaxMlL = 20;
     % Incremental layers. The layers of a transformer reference each wrap of
     % turns that fills the window height before moving on to the next level.
     % Once one layer fills, the next layer is wound on top, seperated by an
     % insulation layer.
-    IncreMlL = 1;
+    IncreMlL = 2;
 
     % Copper wire multiple to reduce resistive losses
     CuMultL = 1.1;
@@ -170,17 +170,17 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Minimum primary windings
     MinPriWindingX = 1;
     % Maximum primary windings
-    MaxPriWindingX = 100;
+    MaxPriWindingX = 200;
     % Incremental primary winding
-    IncreNpX = 1;
+    IncreNpX = 5;
     % Maximum layer of primary winding
     MaxMlpX = 5;
     % Incremental layer of primary winding
     IncreMlpX = 1;
     % Maximum layer of secondary winding
-    MaxMlsX = 20;
+    MaxMlsX = 30;
     % Incremental layer of secondary winding
-    IncreMlsX = 1;
+    IncreMlsX = 2;
     % Max allowable transformer weight (g)
     MaxWeightX = 900;
 
@@ -498,11 +498,11 @@ XfmerDesignTable = cell2table(XfmerDesignCellArr,'VariableNames',{'Po_W','Vppeak
 if exist(filename_xfmer,'file'); delete(filename_xfmer); end
 writetable(XfmerDesignTable,filename_xfmer,'Sheet',ResultDatasheetname);
 
-if size(XfmerDesignTable,1)>=2
-    weightX = XfmerDesignTable{2,36};
+if size(XfmerDesignTable,1)>=1
+    weightX = XfmerDesignTable{1,36};
     % derive magnetizing and leakage inductance estimates here, print it.
-    Lmag = XfmerDesignTable{2,40};
-    Lleakage = XfmerDesignTable{2,41};
+    Lmag = XfmerDesignTable{1,40};
+    Lleakage = XfmerDesignTable{1,41};
     fprintf("Real magnetizing inductance is about %.3f uH",Lmag*1000000);
     fprintf("Real leakage inductance is about %.3f uH",Lleakage*1000000);
 else
@@ -600,13 +600,12 @@ InductorDesignTable = cell2table(InductorDesignCellArr,'VariableNames',{'PoW','V
 if exist(filename_inductor,'file'); delete(filename_inductor); end
 writetable(InductorDesignTable,filename_inductor,'Sheet',ResultDatasheetname);
 
-if size(InductorDesignTable,1)>=2
-    weightL = InductorDesignTable{2,23};
+if size(InductorDesignTable,1)>=1
+    weightL = InductorDesignTable{1,23};
 else 
     weightL = 0;
 end
 fprintf("Inductor Weight is %.2f g",weightL);
-
 
 function checkVarBottleneck(dataVec, minVal, maxVal, name, threshold, tol)
 %   dataVec : the 20 best rows
