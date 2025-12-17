@@ -1,5 +1,10 @@
 clc, clf, clear
 
+% Top-level flags to control which methods run (set to false to skip)
+timed_bruteforce_use = true;
+ga_use = true;
+pso_use = true;
+
 corelossfile = 'CoreLossDataOLD.xlsx';
 coresizefile = 'CoreSizeData.xlsx';
 coresizeSheetname = 'OwnedCores';
@@ -304,69 +309,12 @@ Cp = Cp(KeepIndex);
 GT = GT(KeepIndex);
 Imax = Imax(KeepIndex);
 
-% Loops over every row of the 4-D grid, with tic-toc measuring total
-% runtime.
-%-------------------------------------------
 tic
+% Full brute-force sweep (parfor) removed — not needed for optimized benchmark.
+% Leave empty result arrays so downstream reporting remains safe.
 NumPoints = length(Q);
-
-% --- Pre-Allocation
-% Initialization of zero matrix
-ResultX = zeros(NumPoints, 43); 
-ResultL = zeros(NumPoints, 38);
-toc
-
-
-tic
-parfor i = 1:NumPoints
-    
-    % Peak voltage applied to primary from the input and resonant tank gain.
-    Vpri = Vin_range.*GT(i);
-    % Peak output voltage on the transformer after turn ratio K
-    Vsec = Vin_range.*GT(i).*K(i);
-    % Maximum insulation stress
-    Vinsulation_max = Vsec;
-
-    % Parallel capacitive reactance
-    XCp = 1/(2.*pi.*fs_range.*Cp);
-
-    % Run Xfmer design, return design vector. All CoreLoss and CoreSize
-    % data is passed, along with primary voltage, secondary voltage, output
-    % power goal, switching frequency goal, max insulation stress, and^
-    % winding pattern. None of the resonant tank sweep values are passed
-    % here. Only the GT and K are relevant for the transformer design and
-    % are what are being sweeped within this for loop through Vpri, Vinsulation_max,
-    % and Vsec.
-    SuceedX = Ecore_actual_EEER_xfmer_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6,...
-        Vpri, Vsec, Po_range, fs_range, Vinsulation_max, Winding_Pattern,...
-        layerTapeUse,enamelThickness,kaptonDielStrength,kaptonThickness,...
-        MinTapeMargin,kaptonDensity,CoreInsulationDensity,WireInsulationDensity, ...
-        dielectricstrength_insulation,etaXfmer,TmaxX,TminX,MinPriWindingX, ...
-        MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
-        BSAT_discountX,CoreLossMultipleX,maxpackingfactorX,minpackingfactorX, ...
-        LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0,XCp);
-    
-    % Run Inductor design, return design table. All CoreLoss and CoreSize
-    % data is passed, along with input voltage range (DC), output power
-    % goal, switching frequency goal, winding pattern, and the resonant
-    % tank sweep values.
-    SuceedL = Ecore_actual_EEER_inductor_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6,...
-        Vin_range,GT(i),Po_range,fs_range,Ls(i),Imax(i), Winding_Pattern,...
-        Q(i), f0(i), A(i), K(i), RT(i), Ls(i), Cs(i), Cp(i), GT(i), ...
-        layerTapeUse,enamelThickness,kaptonDielStrength,kaptonThickness,...
-        MinTapeMargin,kaptonDensity,CoreInsulationDensity,WireInsulationDensity, ...
-        dielectricstrength_insulation,etaInductor,TmaxL,TminL,MaxWeightL,mingap, ...
-        MinWindingL,MaxWindingL,IncreNL,MaxMlL,IncreMlL,BSAT_discountL, ...
-        CoreLossMultipleL,maxpackingfactorL,minpackingfactorL,CuMultL,...
-        LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0);
-    
-    % Successful result vector of many columns and 1 row for transformer and inductor are saved
-    ResultX(i,:) = SuceedX;
-    ResultL(i,:) = SuceedL;
-    % Sliced variables in parallel loops allow this ResultX and ResultL to exist outside the
-    % parfor loop.
-end
-toc
+ResultX = zeros(0, 43);
+ResultL = zeros(0, 38);
 
 % -------------------------------------------------------------------------
 % Optimization/benchmarking integration (uses helpers in optimization/)
@@ -432,176 +380,240 @@ data.rou = rou; data.u0 = u0;
 % Create results folder
 if ~exist(opt.results_folder,'dir'), mkdir(opt.results_folder); end
 
-% --- 1) Full brute-force optimum derived from computed ResultX/ResultL ---
-% Combine weights where both transformer and inductor produced non-zero rows
-totalWeights = Inf(size(ResultX,1),1);
-for ii = 1:size(ResultX,1)
-    rx = ResultX(ii,:);
-    rl = ResultL(ii,:);
-    if ~all(rx==0) && ~all(rl==0)
-        wX = rx(36);
-        wL = rl(23);
-        totalWeights(ii) = wX + wL;
-    end
-end
-[minW, minIdx] = min(totalWeights);
-if isfinite(minW)
-    bf_full.best.J = minW;
-    bf_full.best.x = [Q(minIdx), f0(minIdx), A(minIdx), K(minIdx)];
-    bf_full.best.idx = minIdx;
-    save(fullfile(opt.results_folder,'bruteforce_full_best.mat'),'bf_full');
-    fprintf('\nFull brute-force best total weight = %.3f g at Q=%.3g f0=%.3g A=%.3g K=%.3g\n', ...
-        bf_full.best.J, bf_full.best.x(1), bf_full.best.x(2), bf_full.best.x(3), bf_full.best.x(4));
-else
-    fprintf('\nFull brute-force found no feasible designs.\n');
-end
-
-% --- 2) Timed brute-force (2 seconds) using costfun_wrapper to log ---
-ctx.alg = 'bruteforce_timed'; ctx.run_id = round(posixtime(datetime('now')));
-best_timed.J = Inf; best_timed.x = [];
-deadline_secs = 10; % seconds
-startTime = tic;
-i = 1;
-% Use parfeval + wait(timeout) when a parallel pool is available so we can
-% cancel long-running evaluations and respect the overall deadline. If no
-% pool is present, fall back to sequential calls (best-effort timing).
-poolobj = gcp('nocreate');
-while i <= length(Q)
-    remaining = deadline_secs - toc(startTime);
-    if remaining <= 0
-        break;
-    end
-    x = [Q(i), f0(i), A(i), K(i)];
-    if ~isempty(poolobj)
-        % run evaluation on the pool and wait with timeout = remaining
-        f = parfeval(poolobj, @costfun_wrapper, 2, x, data, opt, ctx);
-        % Some MATLAB versions/platforms can throw when calling wait(f,timeout).
-        % Use a safe polling loop that checks IsFinished and enforces timeout.
-        t0 = tic;
-        finished = false;
-        while toc(t0) < remaining
-            % Some MATLAB versions expose 'State' rather than IsFinished.
-            % Check for a 'State' property first, otherwise try IsDone.
-            if isprop(f, 'State')
-                if strcmp(f.State, 'finished')
-                    finished = true;
-                    break;
-                end
-            elseif isprop(f, 'IsDone')
-                if f.IsDone
-                    finished = true;
-                    break;
-                end
-            else
-                % Last resort: attempt to fetchOutputs with zero timeout
-                % in a try block; if it succeeds the future finished.
-                try
-                    if ~isempty(f.Tasks) && strcmp(f.Tasks(1).State,'finished')
-                        finished = true; break;
+% --- Timed brute-force using costfun_wrapper to log (optional) ---
+if timed_bruteforce_use
+    ctx.alg = 'bruteforce_timed'; ctx.run_id = round(posixtime(datetime('now')));
+    best_timed.J = Inf; best_timed.x = [];
+    % Use the global optimizer time budget from defaults
+    deadline_secs = opt.max_time_seconds;
+    startTime = tic;
+    i = 1;
+    % Use parfeval + wait(timeout) when a parallel pool is available so we can
+    % cancel long-running evaluations and respect the overall deadline. If no
+    % pool is present, fall back to sequential calls (best-effort timing).
+    poolobj = gcp('nocreate');
+    while i <= length(Q)
+        remaining = deadline_secs - toc(startTime);
+        if remaining <= 0
+            break;
+        end
+        x = [Q(i), f0(i), A(i), K(i)];
+        if ~isempty(poolobj)
+            % run evaluation on the pool and wait with timeout = remaining
+            f = parfeval(poolobj, @costfun_wrapper, 2, x, data, opt, ctx);
+            % Some MATLAB versions/platforms can throw when calling wait(f,timeout).
+            % Use a safe polling loop that checks IsFinished and enforces timeout.
+            t0 = tic;
+            finished = false;
+            while toc(t0) < remaining
+                % Some MATLAB versions expose 'State' rather than IsFinished.
+                % Check for a 'State' property first, otherwise try IsDone.
+                if isprop(f, 'State')
+                    if strcmp(f.State, 'finished')
+                        finished = true;
+                        break;
                     end
-                catch
-                    % cannot determine; continue polling
+                elseif isprop(f, 'IsDone')
+                    if f.IsDone
+                        finished = true;
+                        break;
+                    end
+                else
+                    % Last resort: attempt to fetchOutputs with zero timeout
+                    % in a try block; if it succeeds the future finished.
+                    try
+                        if ~isempty(f.Tasks) && strcmp(f.Tasks(1).State,'finished')
+                            finished = true; break;
+                        end
+                    catch
+                        % cannot determine; continue polling
+                    end
                 end
+                pause(0.05);
             end
-            pause(0.05);
+            if ~finished
+                % timed out; cancel the future and stop
+                try cancel(f); catch; end
+                break;
+            end
+            try
+                [Jval, out] = fetchOutputs(f);
+            catch ME
+                warning('DriverForLLC:TimedBruteEval','Failed to fetch outputs: %s', ME.message);
+                break;
+            end
+        else
+            % No parallel pool: run inline (cannot preempt mid-eval). This may
+            % overrun the deadline by at most one evaluation.
+            [Jval, out] = costfun_wrapper(x, data, opt, ctx);
         end
-        if ~finished
-            % timed out; cancel the future and stop
-            try cancel(f); catch; end
-            break;
-        end
-        try
-            [Jval, out] = fetchOutputs(f);
-        catch ME
-            warning('DriverForLLC:TimedBruteEval','Failed to fetch outputs: %s', ME.message);
-            break;
-        end
-    else
-        % No parallel pool: run inline (cannot preempt mid-eval). This may
-        % overrun the deadline by at most one evaluation.
-        [Jval, out] = costfun_wrapper(x, data, opt, ctx);
-    end
 
-    if out.eval.feasible && out.eval.J < best_timed.J
-        best_timed.J = out.eval.J; best_timed.x = x; best_timed.entry = out.eval;
+        if out.eval.feasible && out.eval.J < best_timed.J
+            best_timed.J = out.eval.J; best_timed.x = x; best_timed.entry = out.eval;
+        end
+        i = i + 1;
     end
-    i = i + 1;
-end
-fprintf('\nTimed brute-force evaluated %d designs in %.2f seconds.\n', i-1, toc(startTime));
-save(fullfile(opt.results_folder,'bruteforce_timed_best.mat'),'best_timed');
-if isfinite(best_timed.J)
-    fprintf('Timed brute-force (%.1fs) best J = %.3f at Q=%.3g f0=%.3g A=%.3g K=%.3g\n', ...
-        deadline_secs, best_timed.J, best_timed.x(1), best_timed.x(2), best_timed.x(3), best_timed.x(4));
-else
-    fprintf('Timed brute-force (%.1fs) found no feasible designs.\n', deadline_secs);
+    fprintf('\nTimed brute-force evaluated %d designs in %.2f seconds.\n', i-1, toc(startTime));
+    save(fullfile(opt.results_folder,'bruteforce_timed_best.mat'),'best_timed');
+    if isfinite(best_timed.J)
+        fprintf('Timed brute-force (%.1fs) best J = %.3f at Q=%.3g f0=%.3g A=%.3g K=%.3g\n', ...
+            deadline_secs, best_timed.J, best_timed.x(1), best_timed.x(2), best_timed.x(3), best_timed.x(4));
+    else
+        fprintf('Timed brute-force (%.1fs) found no feasible designs.\n', deadline_secs);
+    end
 end
 
 % --- 3) Run optimizers (GA and Particle Swarm) with unified logging ---
 bounds.Q = opt.bounds.Q; bounds.f0 = opt.bounds.f0; bounds.A = opt.bounds.A; bounds.K = opt.bounds.K;
-fprintf('\nRunning GA (seed=1) ...\n');
-t_ga = tic;
-res_ga = run_optimizer('ga', data, opt, bounds, 1);
-time_ga = toc(t_ga);
-fprintf('GA completed in %.2f seconds.\n', time_ga);
-save(fullfile(opt.results_folder,'res_ga.mat'),'res_ga');
+res_ga = struct(); res_pso = struct();
+if ga_use
+    fprintf('\nRunning GA (seed=1) ...\n');
+    t_ga = tic;
+    res_ga = run_optimizer('ga', data, opt, bounds, 1);
+    time_ga = toc(t_ga);
+    fprintf('GA completed in %.2f seconds.\n', time_ga);
+    save(fullfile(opt.results_folder,'res_ga.mat'),'res_ga');
 
-if isfield(res_ga,'fbest') && isfinite(res_ga.fbest)
-    if isfield(res_ga,'xbest') && ~isempty(res_ga.xbest)
-        fprintf('GA best total weight = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', res_ga.fbest, res_ga.xbest);
-    else
-        fprintf('GA best total weight = %.3f g (no parameter vector returned)\n', res_ga.fbest);
-    end
-else
-    % attempt to print preliminary info if available
-    if isfield(res_ga,'output') && isstruct(res_ga.output) && isfield(res_ga.output,'prelim_best') && isfinite(res_ga.output.prelim_best)
-        pb = res_ga.output.prelim_best; px = res_ga.output.prelim_x;
-        if ~isempty(px)
-            fprintf('GA aborted: preliminary best = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', pb, px);
+    if isfield(res_ga,'fbest') && isfinite(res_ga.fbest)
+        if isfield(res_ga,'xbest') && ~isempty(res_ga.xbest)
+            fprintf('GA best total weight = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', res_ga.fbest, res_ga.xbest);
         else
-            fprintf('GA aborted: no feasible samples found in preliminary sampling.\n');
+            fprintf('GA best total weight = %.3f g (no parameter vector returned)\n', res_ga.fbest);
         end
     else
-        fprintf('GA aborted or failed without a result.\n');
+        if isfield(res_ga,'output') && isstruct(res_ga.output) && isfield(res_ga.output,'prelim_best') && isfinite(res_ga.output.prelim_best)
+            pb = res_ga.output.prelim_best; px = res_ga.output.prelim_x;
+            if ~isempty(px)
+                fprintf('GA aborted: preliminary best = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', pb, px);
+            else
+                fprintf('GA aborted: no feasible samples found in preliminary sampling.\n');
+            end
+        else
+            fprintf('GA aborted or failed without a result.\n');
+        end
     end
 end
 
-fprintf('\nRunning Particle Swarm (seed=2) ...\n');
-t_pso = tic;
-res_pso = run_optimizer('particleswarm', data, opt, bounds, 2);
-time_pso = toc(t_pso);
-fprintf('Particle Swarm completed in %.2f seconds.\n', time_pso);
+if pso_use
+    fprintf('\nRunning Particle Swarm (seed=2) ...\n');
+    t_pso = tic;
+    res_pso = run_optimizer('particleswarm', data, opt, bounds, 2);
+    time_pso = toc(t_pso);
+    fprintf('Particle Swarm completed in %.2f seconds.\n', time_pso);
 
-save(fullfile(opt.results_folder,'res_pso.mat'),'res_pso');
-if isfield(res_pso,'fbest') && isfinite(res_pso.fbest)
-    if isfield(res_pso,'xbest') && ~isempty(res_pso.xbest)
-        fprintf('PSO best total weight = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', res_pso.fbest, res_pso.xbest);
-    else
-        fprintf('PSO best total weight = %.3f g (no parameter vector returned)\n', res_pso.fbest);
-    end
-else
-    if isfield(res_pso,'output') && isstruct(res_pso.output) && isfield(res_pso.output,'prelim_best') && isfinite(res_pso.output.prelim_best)
-        pb = res_pso.output.prelim_best; px = res_pso.output.prelim_x;
-        if ~isempty(px)
-            fprintf('PSO aborted: preliminary best = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', pb, px);
+    save(fullfile(opt.results_folder,'res_pso.mat'),'res_pso');
+    if isfield(res_pso,'fbest') && isfinite(res_pso.fbest)
+        if isfield(res_pso,'xbest') && ~isempty(res_pso.xbest)
+            fprintf('PSO best total weight = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', res_pso.fbest, res_pso.xbest);
         else
-            fprintf('PSO aborted: no feasible samples found in preliminary sampling.\n');
+            fprintf('PSO best total weight = %.3f g (no parameter vector returned)\n', res_pso.fbest);
         end
     else
-        fprintf('PSO aborted or failed without a result.\n');
+        if isfield(res_pso,'output') && isstruct(res_pso.output) && isfield(res_pso.output,'prelim_best') && isfinite(res_pso.output.prelim_best)
+            pb = res_pso.output.prelim_best; px = res_pso.output.prelim_x;
+            if ~isempty(px)
+                fprintf('PSO aborted: preliminary best = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', pb, px);
+            else
+                fprintf('PSO aborted: no feasible samples found in preliminary sampling.\n');
+            end
+        else
+            fprintf('PSO aborted or failed without a result.\n');
+        end
     end
 end
 
-% Print a short summary
+% Print a short summary and choose best among methods actually run
 fprintf('\nSummary:\n');
-if exist('bf_full','var') && isfield(bf_full,'best')
-    fprintf('  Full brute best: J=%.3f at [Q f0 A K]=[%.3g %.3g %.3g %.3g]\n', bf_full.best.J, bf_full.best.x);
-end
-if ~isempty(best_timed.x)
-    fprintf('  Timed brute (2s): J=%.3f at [Q f0 A K]=[%.3g %.3g %.3g %.3g]\n', best_timed.J, best_timed.x);
-end
-fprintf('  GA: J=%.3f at x=[%.3g %.3g %.3g %.3g]\n', res_ga.fbest, res_ga.xbest);
-fprintf('  PSO: J=%.3f at x=[%.3g %.3g %.3g %.3g]\n', res_pso.fbest, res_pso.xbest);
 
+candidates = struct('name',{},'J',{},'x',{});
+
+% Timed brute
+if timed_bruteforce_use && exist('best_timed','var') && isfield(best_timed,'J') && isfinite(best_timed.J)
+    candidates(end+1).name = 'Timed brute';
+    candidates(end).J = best_timed.J; candidates(end).x = best_timed.x;
+    fprintf('  Timed brute (%.1fs): J=%.3f at [Q f0 A K]=[%.3g %.3g %.3g %.3g]\n', deadline_secs, best_timed.J, best_timed.x(1), best_timed.x(2), best_timed.x(3), best_timed.x(4));
+elseif timed_bruteforce_use
+    fprintf('  Timed brute: no feasible result\n');
+end
+
+% GA
+if ga_use
+    if isfield(res_ga,'fbest') && isfinite(res_ga.fbest)
+        candidates(end+1).name = 'GA'; candidates(end).J = res_ga.fbest; candidates(end).x = res_ga.xbest;
+        fprintf('  GA: J=%.3f at x=[%.3g %.3g %.3g %.3g]\n', res_ga.fbest, res_ga.xbest);
+    else
+        if isfield(res_ga,'output') && isstruct(res_ga.output) && isfield(res_ga.output,'prelim_best') && isfinite(res_ga.output.prelim_best)
+            pb = res_ga.output.prelim_best; px = res_ga.output.prelim_x;
+            if ~isempty(px)
+                fprintf('  GA aborted: preliminary best = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', pb, px);
+            else
+                fprintf('  GA aborted: no feasible samples found in preliminary sampling.\n');
+            end
+        else
+            fprintf('  GA: no finite result\n');
+        end
+    end
+end
+
+% PSO
+if pso_use
+    if isfield(res_pso,'fbest') && isfinite(res_pso.fbest)
+        candidates(end+1).name = 'PSO'; candidates(end).J = res_pso.fbest; candidates(end).x = res_pso.xbest;
+        fprintf('  PSO: J=%.3f at x=[%.3g %.3g %.3g %.3g]\n', res_pso.fbest, res_pso.xbest);
+    else
+        if isfield(res_pso,'output') && isstruct(res_pso.output) && isfield(res_pso.output,'prelim_best') && isfinite(res_pso.output.prelim_best)
+            pb = res_pso.output.prelim_best; px = res_pso.output.prelim_x;
+            if ~isempty(px)
+                fprintf('  PSO aborted: preliminary best = %.3f g at [Q f0 A K] = [%.3g %.3g %.3g %.3g]\n', pb, px);
+            else
+                fprintf('  PSO aborted: no feasible samples found in preliminary sampling.\n');
+            end
+        else
+            fprintf('  PSO: no finite result\n');
+        end
+    end
+end
+
+% Choose best among candidates
+if isempty(candidates)
+    fprintf('\nNo successful results from the selected methods.\n');
+else
+    Js = [candidates.J];
+    [bestJ, bi] = min(Js);
+    best = candidates(bi);
+    fprintf('\nBest overall result: %s with J=%.3f at [Q f0 A K]=[%.3g %.3g %.3g %.3g]\n', best.name, best.J, best.x(1), best.x(2), best.x(3), best.x(4));
+end
+
+
+% Recompute full evaluator rows for the best design 
+if ~isempty(candidates)
+    % call the wrapper to get the full evaluator outputs (details.SuceedX/SuceedL)
+    ctx_final.alg = 'final_recompute'; ctx_final.run_id = round(posixtime(datetime('now')));
+    try
+        [Jtmp, outtmp] = costfun_wrapper(best.x, data, opt, ctx_final);
+        if isfield(outtmp.eval.details,'SuceedX') && isfield(outtmp.eval.details,'SuceedL')
+            sx = outtmp.eval.details.SuceedX;
+            sl = outtmp.eval.details.SuceedL;
+            if isempty(sx) || ~isnumeric(sx) || numel(sx) < 43
+                sx = zeros(1,43);
+            end
+            if isempty(sl) || ~isnumeric(sl) || numel(sl) < 38
+                sl = zeros(1,38);
+            end
+            % populate with two identical rows so downstream indexing works
+            ResultX = repmat(sx(:)', 2, 1);
+            ResultL = repmat(sl(:)', 2, 1);
+        else
+            % fallback: leave empty but at least sized correctly
+            ResultX = zeros(2,43);
+            ResultL = zeros(2,38);
+        end
+    catch ME
+        warning('DriverForLLC:FinalRecompute','Failed to recompute best design: %s', ME.message);
+        ResultX = zeros(2,43);
+        ResultL = zeros(2,38);
+    end
+end
 
 % Results output
 %-------------------------------------------
