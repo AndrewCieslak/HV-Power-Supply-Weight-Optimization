@@ -5,7 +5,7 @@ function y = Ecore_actual_EEER_inductor_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6, .
     CoreInsulationDensity,WireInsulationDensity,dielectricstrength_insulation,...
     etaInductor,TmaxL,TminL,MaxWeightL,mingap,MinWindingL,MaxWindingL,IncreNL, ...
     MaxMlL,IncreMlL,BSAT_discountL,CoreLossMultipleL,maxpackingfactorL,minpackingfactorL,CuMultL, ...
-    LitzFactor,MinWireDia,Jwmax,MinLitzDia,CopperDensity,rou,u0)
+    LitzFactor,MinWireDia,Jwmax,MinLitzStrandDia,CopperDensity,rou,u0,minLitzStrands)
 
 
 
@@ -210,7 +210,7 @@ KeepIndex = intersect(KeepAirGap, Keep_Bmindex);
 
 % Debug
 if isempty(KeepIndex)
-    warning('No Successful Indexes');
+    warning('No Successful Core Indexes');
     y = zeros(1,38);
     return;
 end
@@ -324,21 +324,27 @@ else
     Iprms=Imax./sqrt(2);
     % AC skin depth
     skindepth=1./sqrt(pi.*fs.*u0./rou);
-    % Area required of wire m^2
+
+    % Required Copper Cross-Section
     Areq_p=CuMultL.*Iprms./Jwmax;
-    % solid equivalent diameter
+
+    % Required Copper Diameter
     dsolid=2.*sqrt(Areq_p./pi);
-    % Solid vs. litz
+
+    % Solid Core Choice
     useSolid=dsolid<=2.*skindepth;
-    % Litz diameter
-    dstrand_litz=max(MinLitzDia,2.*skindepth);
-    % strand cross section area
+
+    % Litz Strand Diameter
+    dstrand_litz=max(MinLitzStrandDia,2.*skindepth);
+
+    % Litz strand cross-sectional area
     Astrand=pi.*(dstrand_litz./2).^2;
-    % Number of strands default to 1
+
+    % Number of strands needed
     Pri_Nstrands=ones(size(Iprms));
-    % Where not solid, use litz number of strands
-    Pri_Nstrands(~useSolid)=ceil(Areq_p(~useSolid)./Astrand(~useSolid));
-    % use solid diameter if solid, bundle diameter if litz
+    Pri_Nstrands(~useSolid)=max(minLitzStrands,ceil(Areq_p(~useSolid)./Astrand(~useSolid)));
+
+    % Wire uninsulated diameter
     Pri_WireDia=max(MinWireDia,dsolid);
     idLitz=~useSolid;
     if any(idLitz)
@@ -348,16 +354,16 @@ else
     % Strand diameter
     Pri_ds=max(MinWireDia,dsolid);
     Pri_ds(idLitz)=dstrand_litz(idLitz);
-    % Full wire size with insulation
+
+    % Wire Insulated Diameter
     Pri_FullWireDia=Pri_WireDia+2.*Vpri./dielectricstrength_insulation;
     if layerTapeUse
         Pri_FullWireDia = Pri_WireDia + enamelThickness.*2;
     end
 
-    A_pri_cu=(pi.*(Pri_WireDia.^2))./4;
-    A_pri_full=(pi.*(Pri_FullWireDia.^2))./4;
+    CopperPacking=(Areq_p.*Np)./(H.*W);
 
-    CopperPacking=(A_pri_cu.*Np)./(H.*W);
+    A_pri_full=(pi.*(Pri_FullWireDia.^2))./4;
     OverallPacking=(A_pri_full.*Np)./(H.*W);
 
     CoreInsulationThickness=Vpri./dielectricstrength_insulation;
@@ -508,7 +514,7 @@ else
     B_index = find(Bm < BSAT*BSAT_discountL);
     [Bmin,BminIndex] = min(Bm);
         
-    % Filter by Temperature and Power Loss
+    % Filter by Temperature and Efficiency
     P_loss_index = find(Pcopper + Pcore <= Po./etaInductor - Po);
     Tafterloss_index = find(Tafterloss <= TmaxL);
     Tmin_index = find(Tafterloss >= TminL);
@@ -597,9 +603,9 @@ else
     %% -----------------------------------------------------------------------------
 
     % Keep only the lightest design
-    [~, SortIndex] = sort(TotalWeight(Index_Meet_All));
-    if ~isempty(SortIndex)
-        TotalWeightSortIndex = Index_Meet_All(SortIndex(1));
+    if ~isempty(Index_Meet_All)
+        TotalWeightSortIndex = Index_Meet_All;
+        
         Volume = Ve(TotalWeightSortIndex) ...
            + WeightPri_copper(TotalWeightSortIndex)./CopperDensity ...
            + WeightPri_Insu(TotalWeightSortIndex)./WireInsulationDensity ...
@@ -657,7 +663,7 @@ else
         y = Design_inductor;
     else
         y = zeros(1,38);
-        warning('No successful results Test2, Inductor');
+        warning('Inductor Failed');
     end
 end
 %toc
