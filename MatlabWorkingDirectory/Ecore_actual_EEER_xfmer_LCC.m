@@ -197,12 +197,15 @@ Mls                  = Mls(KeepIndex);
 
 
 if isempty(Po)
+    %{
+    Unhelpfull when running the brute force
     fprintf('Bm_dummy range: %.3f .. %.3f T\n', min(Bm_dummy), max(Bm_dummy));
     fprintf('BSAT*0.75 range: %.3f .. %.3f T\n', min(BSAT*BSAT_discountX), max(BSAT*BSAT_discountX));
     warning(['Empty. Every candidate design violates the B-SAT screening.' ...
         'Increase transformer geometry size (likely), or Increase Np range, ' ...
         'or loosen other ranges, or ensure units match. Try again']);
-    y=0;
+    %}
+    y = zeros(1,43);
     return;
 end
 
@@ -236,7 +239,7 @@ if isempty(rowIdcs)
     warning('CoreLoss:NoUsableColumns', ...
           ['No datasheet loss columns within ±20% of fs=%g Hz for any selected material.\n' ...
            'Check CoreLossData.xlsx sheets: Freq/Bfield/Ploss pairs and fs_range.'], fs_range);
-    y=0;
+    y = zeros(1,43);
     return;
 end
 
@@ -693,32 +696,32 @@ else
     [PackingMax,PackingMaxValIndex] = min(OverallPacking);
 
     if isempty(P_loss_index)
-        fprintf("Transformer Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d",Pmin,PminValIndex);
+        % fprintf("Transformer Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d \n",Pmin,PminValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(Tafterloss_index)
-        fprintf("Transformer Bottlenecked. Min T out of all candidates: %.2f Index: %d",Tminimum,TminValIndex);
+        % fprintf("Transformer Bottlenecked. Min T out of all candidates: %.2f Index: %d \n",Tminimum,TminValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(B_index)
-        fprintf("Transformer Bottlenecked. Min B out of all candidates: %.2f Index: %d",Bmin,BminIndex);
+        % fprintf("Transformer Bottlenecked. Min B out of all candidates: %.2f Index: %d \n",Bmin,BminIndex);
         y = zeros(1,43);
         return
     end
     if isempty(TotalWeight_index)
-        fprintf("Transformer Bottlenecked. Min Weight out of all candidates: %.2f Index: %d",WMin,WminValIndex);
+        % fprintf("Transformer Bottlenecked. Min Weight out of all candidates: %.2f Index: %d \n",WMin,WminValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(OverallPackingmin_index)
-        fprintf("Transformer Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d",PackingMin,PackingMinValIndex);
+        % fprintf("Transformer Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d \n",PackingMin,PackingMinValIndex);
         y = zeros(1,43);
         return
     end
     if isempty(OverallPackingmax_index)
-        fprintf("Transformer Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d",PackingMax,PackingMaxValIndex);
+        % fprintf("Transformer Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d \n",PackingMax,PackingMaxValIndex);
         y = zeros(1,43);
         return
     end
@@ -794,7 +797,7 @@ else
 
     if isempty(WindowFit_index)
         fprintf("Transformer Bottlenecked. Max window area");
-        y = zeros(1,41);
+        y = zeros(1,43);
         return
     end
 

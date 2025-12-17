@@ -211,7 +211,7 @@ KeepIndex = intersect(KeepAirGap, Keep_Bmindex);
 % Debug
 if isempty(KeepIndex)
     warning('No Successful Indexes');
-    y = zeros(1,37);
+    y = zeros(1,38);
     return;
 end
 
@@ -296,9 +296,9 @@ alpha = nonzeros(reshape(alpha(UniqueRowIdcs,:)',[],1));
 % like losses, size, subsequent weight
 % -------------------------------------------------------------------
 
-if (isempty(Po))
+    if (isempty(Po))
     warning('No successful inductor results Test1, Inductor.');
-    y = 0;
+    y = zeros(1,38);
 else
 
 
@@ -542,42 +542,42 @@ else
     [PriPerLayerMax,PPLMaxIndex] = max(Pri_PerLayer.*Pri_FullWireDia);
 
     if isempty(P_loss_index)
-        fprintf("Inductor Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d",Pmin,PminValIndex);
+        %fprintf("Inductor Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d",Pmin,PminValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(Tafterloss_index)
-        fprintf("Inductor Bottlenecked. Min T out of all candidates: %.2f Index: %d",Tminimum,TminValIndex);
+        %fprintf("Inductor Bottlenecked. Min T out of all candidates: %.2f Index: %d",Tminimum,TminValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(B_index)
-        fprintf("Inductor Bottlenecked. Min B out of all candidates: %.2f Index: %d",Bmin,BminIndex);
+        %fprintf("Inductor Bottlenecked. Min B out of all candidates: %.2f Index: %d",Bmin,BminIndex);
         y = zeros(1,38);
         return
     end
     if isempty(TotalWeight_index)
-        fprintf("Inductor Bottlenecked. Min Weight out of all candidates: %.2f Index: %d",WMin,WminValIndex);
+        %fprintf("Inductor Bottlenecked. Min Weight out of all candidates: %.2f Index: %d",WMin,WminValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(OverallPackingmin_index)
-        fprintf("Inductor Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d",PackingMin,PackingMinValIndex);
+        %fprintf("Inductor Bottlenecked. Min packing factor out of all candidates: %.2f Index: %d",PackingMin,PackingMinValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(OverallPackingmax_index)
-        fprintf("Inductor Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d",PackingMax,PackingMaxValIndex);
+        %fprintf("Inductor Bottlenecked. Max packing factor out of all candidates: %.2f Index: %d",PackingMax,PackingMaxValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(Mlp_index)
-        fprintf("Inductor Bottlenecked. Max layers width of all candidates: %.2f Index: %d",MlpMax,MlpMaxValIndex);
+        %fprintf("Inductor Bottlenecked. Max layers width of all candidates: %.2f Index: %d",MlpMax,MlpMaxValIndex);
         y = zeros(1,38);
         return
     end
     if isempty(Pri_PerLayer_index)
-        fprintf("Inductor Bottlenecked. Max layer height out of all candidates: %.2f Index: %d",PriPerLayerMax,PPLMaxIndex);
+        %fprintf("Inductor Bottlenecked. Max layer height out of all candidates: %.2f Index: %d",PriPerLayerMax,PPLMaxIndex);
         y = zeros(1,38);
         return
     end
@@ -612,7 +612,7 @@ else
         Pri_StrandAWG = -39*log(Pri_StrandDiaMM./0.127)./log(92)+36;
 
         % Preallocate Design_inductor
-        Design_inductor = zeros(numel(TotalWeightSortIndex), 37);
+        Design_inductor = zeros(numel(TotalWeightSortIndex), 38);
 
         Design_inductor(:, 1)  = Po(TotalWeightSortIndex);
         Design_inductor(:, 2)  = Vin(TotalWeightSortIndex);
