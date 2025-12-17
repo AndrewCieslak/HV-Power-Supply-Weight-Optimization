@@ -459,7 +459,7 @@ end
 % --- 2) Timed brute-force (2 seconds) using costfun_wrapper to log ---
 ctx.alg = 'bruteforce_timed'; ctx.run_id = round(posixtime(datetime('now')));
 best_timed.J = Inf; best_timed.x = [];
-deadline_secs = 2; % seconds
+deadline_secs = 10; % seconds
 startTime = tic;
 i = 1;
 % Use parfeval + wait(timeout) when a parallel pool is available so we can

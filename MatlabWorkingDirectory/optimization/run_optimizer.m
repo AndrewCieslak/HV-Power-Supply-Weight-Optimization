@@ -57,18 +57,8 @@ for ii = 1:init_N
     end
 end
 
-%{
- if feasible_count == 0
-    warning('run_optimizer:NoFeasible','No feasible candidate found in preliminary sampling; aborting %s run.', algorithm);
-    res.xbest = []; res.fbest = Inf; res.exitflag = -2;
-    res.output = struct('prelim_best',prelim_best,'prelim_x',prelim_x,'feasible_count',feasible_count);
-    res.end_time = datetime('now');
-    return;
-end 
-%}
-
 if feasible_count == 0
-    warning('run_optimizer:NoFeasible','No feasible candidate in prelim sampling. Starting %s with random population (this may take time).', algorithm);
+    warning('run_optimizer:NoFeasible','No feasible candidate in prelim sampling. Starting %s with random population.', algorithm);
 else
     fprintf('  Found %d feasible candidates in preliminary sampling; best J = %.4f\n', feasible_count, prelim_best);
 end

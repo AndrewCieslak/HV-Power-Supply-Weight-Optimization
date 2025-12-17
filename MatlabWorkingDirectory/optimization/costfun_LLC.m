@@ -75,6 +75,15 @@ if ~(GT * K >= lower_gain && GT * K <= upper_gain && GT > 1)
     viol_low = max(0, lower_gain - GT*K);
     viol_high = max(0, GT*K - upper_gain);
     penalty = penalty + opt.penalty.GTK_scale * (viol_low + viol_high);
+
+    % If gain is wrong, DO NOT run the heavy physics simulations.
+    % Return immediately with the high penalty.
+    J = opt.penalty.infeasible + penalty;
+    details.weightX = 0; details.weightL = 0; details.Jraw = 0;
+    details.SuceedX = zeros(1,43); details.SuceedL = zeros(1,38);
+    details.feasible = false;
+    details.penalty = penalty;
+    return;
 end
 
 % Compute Vpri and Vsec for transformer

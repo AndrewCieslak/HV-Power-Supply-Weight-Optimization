@@ -75,6 +75,7 @@ else
     log_entries(end+1) = entry; %#ok<AGROW>
 end
 
+%{
 % Save periodically
 if ~exist(opt.results_folder,'dir')
     mkdir(opt.results_folder);
@@ -84,7 +85,7 @@ end
 if nargin < 4 || ~isfield(ctx,'alg') || ~isfield(ctx,'run_id')
     fname = fullfile(opt.results_folder, sprintf('eval_log_run.mat'));
 else
-    fname = fullfile(opt.results_folder, sprintf('%s_run%d_eval_log.mat', ctx.alg, ctx.run_id));
+    fname = fullfile(opt.results_folder, sprintf('%s_eval_log.mat', ctx.alg));
 end
 
 % Save only the log_entries and a summary to file to avoid huge files
@@ -92,6 +93,7 @@ summary.best_so_far = min([log_entries.J]);
 summary.evals = numel(log_entries);
 summary.last_time = toc(start_time);
 save(fname, 'log_entries', 'summary');
+%}
 
 % Return optional info
 out.eval = entry;

@@ -17,7 +17,7 @@ opt.bounds.A = [0.1, 1.0];            % Capacitance ratio
 opt.bounds.K = [1.0, 10.0];           % Turns ratio (secondary/primary)
 
 % Budget and timing
-opt.max_time_seconds = 120;           % 2 minutes per optimization run
+opt.max_time_seconds = 10;           % 2 minutes per optimization run
 opt.max_evals = 1500;                % fallback maximum function evaluations
 opt.repeats = 5;                     % repeats for stochastic algorithms
 
