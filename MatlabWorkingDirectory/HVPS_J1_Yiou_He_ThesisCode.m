@@ -130,7 +130,7 @@ figure(2);
 Xplotrange = [min(min(FXaxis)), min(max(FXaxis, [], 2))];
 for i = 1:1:size(FXaxis, 1)
     line(FXAxis(i,:), FYaxis(i,:), 'Color', colorcodes(i,:),'linewidth',3);hold on;
-    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, ...
+    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, 
         'MarkerEdgeAlpha',1); hold on;
 end
 hold off; grid;
@@ -177,7 +177,7 @@ set(b, 'XTick', xtick, 'XTickLabel', xticklab);
 % the full VM at 2*Po and 2*Vo
 FXaxis = [HWCWVMfactor; HWDSVMfactor; FWCWVMfactor; FWDSVMfactor];
 FYaxis = [HWCWEnergy; HWDSEnergy; FWCWEnergy; FWDSEnergy] / 1e12*2;
-FXaxis(isinf(FXaxis))= NaN; 
+FXaxis(isinf(FXaxis)) = NaN;
 FYaxis(isinf(FYaxis)) = NaN;
 xaxislabel = 'Voltage conversion ratio ({V_{OUT}}/{V_{IN}})';
 yaxislabel = 'Total energy in capacitors (J)';
@@ -191,7 +191,7 @@ figure(3);
 Xplotrange = [min(min(FXaxis)), min(max(FXaxis, [], 2))];
 for i = 1:1:size(FXaxis, 1)
     line(FXAxis(i,:), FYaxis(i,:), 'Color', colorcodes(i,:),'linewidth',3);hold on;
-    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, ...
+    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, 
         'MarkerEdgeAlpha',1); hold on;
 end
 hold off; grid;
