@@ -204,7 +204,7 @@ if isempty(Po)
     warning(['Empty. Every candidate design violates the B-SAT screening.' ...
         'Increase transformer geometry size (likely), or Increase Np range, ' ...
         'or loosen other ranges, or ensure units match. Try again \n']);
-    y=0;
+    y = zeros(1,43);
     return;
 end
 
@@ -238,7 +238,7 @@ if isempty(rowIdcs)
     warning('CoreLoss:NoUsableColumns', ...
           ['No datasheet loss columns within ±20% of fs=%g Hz for any selected material.\n' ...
            'Check CoreLossData.xlsx sheets: Freq/Bfield/Ploss pairs and fs_range. \n'], fs_range);
-    y=0;
+    y = zeros(1,43);
     return;
 end
 
@@ -267,18 +267,20 @@ Mlp                 = repelem(Mlp(UniqueRowIdcs), ColDuplicate);
 Mls                 = repelem(Mls(UniqueRowIdcs), ColDuplicate);
 
 
-% Collapse the nonzero columns into vectors aligned with repeats
-matfs = nonzeros(reshape(matfs(UniqueRowIdcs,:)',[],1));
-K1    = nonzeros(reshape(K1(UniqueRowIdcs,:)',   [],1));
-beta  = nonzeros(reshape(beta(UniqueRowIdcs,:)', [],1));
-alpha = nonzeros(reshape(alpha(UniqueRowIdcs,:)',[],1));
+% Collapse into vectors aligned with repeats using mask (not nonzeros,
+% which can misalign if Steinmetz params are zero for single-freq materials)
+steinmetz_mask = reshape(matfsIndex(UniqueRowIdcs,:)', [], 1) > 0;
+matfs = reshape(matfs(UniqueRowIdcs,:)', [], 1); matfs = matfs(steinmetz_mask);
+K1    = reshape(K1(UniqueRowIdcs,:)',    [], 1); K1    = K1(steinmetz_mask);
+beta  = reshape(beta(UniqueRowIdcs,:)',  [], 1); beta  = beta(steinmetz_mask);
+alpha = reshape(alpha(UniqueRowIdcs,:)', [], 1); alpha = alpha(steinmetz_mask);
 
 % For the remaining indexes, compute the more detailed parameters 
 % like losses, size, subsequent weight
 % -----------------------------------------------------------------
 
 if (isempty(Po))
-    y = 0;
+    y = zeros(1,43);
 else
 
     % Here, a suitable wire size for primary and secondary is chosen to
@@ -296,10 +298,13 @@ else
     skindepth = 1./sqrt(pi*fs*u0/rou);
     Ns = ceil(Np.*(Vspeak./Vppeak));
 
-    % THIS NEEDS TO BE CHANGED FOR MAGNETIZING CURRENT!
+    % Magnetizing inductance (computed early for magnetizing current)
+    Lm = ui.*u0.*Ac.*Np.^2./Le;
 
-    % Primary Current
-    Iprms = (Po/etaXfmer)./(Vppeak/sqrt(2));
+    % Primary Current (including magnetizing current)
+    Iload_rms = (Po/etaXfmer)./(Vppeak/sqrt(2));
+    Im_rms = Vppeak ./ (2.*pi.*fs.*Lm.*sqrt(2));
+    Iprms = sqrt(Iload_rms.^2 + Im_rms.^2);
     Ippeak = Iprms*sqrt(2);
     % Secondary Current
     Isrms  = Po./(Vspeak/sqrt(2));
@@ -384,7 +389,7 @@ else
     Sec_ds(idx)=dstrandMinlitz(idx);
 
     % Wire Jacket or Magnet Enamel (if using layer tape)
-    Sec_FullWireDia = Sec_WireDia + Vspeak./dielectricstrength_insulation;
+    Sec_FullWireDia = Sec_WireDia + 2.*Vspeak./dielectricstrength_insulation;
     if layerTapeUse
         Sec_FullWireDia = Sec_WireDia + enamelThickness.*2;
     end
@@ -418,6 +423,8 @@ else
     isER = (XcoreCoreShapeIndex == 2);
     isU  = (XcoreCoreShapeIndex == 3);
     isUR = (XcoreCoreShapeIndex == 4);
+    TLp = zeros(size(Np));
+    TLs = zeros(size(Np));
 
     switch Winding_Pattern
         case 1 % center leg ----------------
@@ -520,12 +527,9 @@ else
     SecKlayer = sqrt(pi.*Sec_Nstrands).*Sec_ds./(2.*Sec_WireDia);
     Sec_xp = Sec_ds./(sqrt(pi.*SecKlayer).*2.*skindepth);
 
-    TLp = TLp';
-    TLs = TLs';
-
-    % Fixed overestimation by litzfactor
-    Pri_Rdc = rou .* TLp ./ (pi.*dsolid_p.^2./4);
-    Sec_Rdc = rou .* TLs ./ (pi.*dsolid_s.^2./4);
+    % Rdc based on actual conductor cross-section (litz strands or solid)
+    Pri_Rdc = rou .* TLp ./ (Pri_Nstrands .* (pi .* Pri_ds.^2 ./ 4));
+    Sec_Rdc = rou .* TLs ./ (Sec_Nstrands .* (pi .* Sec_ds.^2 ./ 4));
     Pri_Fr = Pri_xp.*((sinh(2.*Pri_xp) + sin(2.*Pri_xp))./(cosh(2.*Pri_xp) - cos(2.* ...
         Pri_xp)) + 2.*(Mlp.^2.*Pri_Nstrands - 1)./3.*(sinh(Pri_xp) - sin(Pri_xp))./( ...
         cosh(Pri_xp) + cos(Pri_xp)));
@@ -667,7 +671,7 @@ else
     B_index = find(Bm < BSAT*BSAT_discountX);
     [Bmin,BminIndex] = min(Bm);
         
-    % Filter by Temperature and Power Loss
+    % Filter by Temperature
     P_loss_index = find(Pcopper + Pcore <= Po./etaXfmer - Po);
     Tafterloss_index = find(Tafterloss <= TmaxX);
     Tmin_index = find(Tafterloss >= TminX);
@@ -705,11 +709,6 @@ else
     [PackingMin,PackingMinValIndex] = max(OverallPacking);
     [PackingMax,PackingMaxValIndex] = min(OverallPacking);
 
-    if isempty(P_loss_index)
-        fprintf("Transformer Bottlenecked. Min Power loss out of all candidates: %.2f Index: %d \n",Pmin,PminValIndex);
-        y = zeros(1,43);
-        return
-    end
     if isempty(Tafterloss_index)
         fprintf("Transformer Bottlenecked. Min T out of all candidates: %.2f Index: %d \n",Tminimum,TminValIndex);
         y = zeros(1,43);
@@ -814,7 +813,7 @@ else
     % Final Filter
     %---------------------------------------------------------------------------------
 
-    Index_Meet_All = intersect(B_index,P_loss_index);
+    Index_Meet_All = B_index;
     Index_Meet_All = intersect(Index_Meet_All,Tafterloss_index);
     Index_Meet_All = intersect(Index_Meet_All,Tmin_index);
     Index_Meet_All = intersect(Index_Meet_All,TotalWeight_index);
@@ -899,3 +898,5 @@ else
     end
 end
 end
+
+
