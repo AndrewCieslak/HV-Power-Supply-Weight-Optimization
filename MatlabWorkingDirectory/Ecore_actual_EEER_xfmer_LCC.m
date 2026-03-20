@@ -76,7 +76,9 @@ for i = 1:1:NoMat
         F_atPv_500(i,j) = DataSheetFreq(2*j-1); % in Hz
         PF_atPv_500(i,j) = B_atPv_500(i,j)*F_atPv_500(i,j)^PFfactor;
 
-        if (abs(fs_range - F_atPv_500(i,j))/fs_range <= 0.2)
+
+        rel_err = abs(fs_range - F_atPv_500(i,j))./fs_range;
+        if any(rel_err <= 0.4)
             FreqFlag(i) = 1;
         end
 
