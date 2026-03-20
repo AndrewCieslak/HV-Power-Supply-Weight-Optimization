@@ -4,7 +4,7 @@ global ResultX ResultL
 
 corelossfile = 'CoreLossData.xlsx';
 coresizefile = 'CoreSizeData.xlsx';
-coresizeSheetname = 'OwnedCores';
+coresizeSheetname = 'Ecore';
 
 raw1 = readcell(corelossfile,'Sheet','Freq');
 raw2 = readcell(corelossfile,'Sheet','Bfield');
@@ -71,7 +71,7 @@ raw = readcell(coresizefile,'Sheet',coresizeSheetname);
 
 % For litz, the main AWG is an equivalent for the whole bundle.
 
-Date = '11-13-25';
+Date = '3-19-26';
 % Quality factor
 Q_range = 0.1:0.1:1;
 % Resonant frequency
@@ -87,7 +87,7 @@ A_range = linspace(0.1,1,5);
 Vin_range = 200;
 % Peak of the output voltage that one hope to achieve (V)
 % peak to peak is 2x this value
-Vo_range = 1e4;
+Vo_range = 2.5e4;
 % Output power desired (W)
 Po_range = 100;
 % Turns ratio secondary/primary
@@ -115,13 +115,13 @@ dielectricstrength_insulation = 0.5 * 200e5;
 %-------------------------------------------
 
     % Lowest allowed inductor efficiency
-    etaInductor = 0.90;
+    etaInductor = 0.50;
     % Max allowable temperature (C)
     TmaxL = 100;
     % Min allowable temperature (C)
     TminL = 25;
     % Maximum allowable weight (g)
-    MaxWeightL = 700;
+    MaxWeightL = 2000;
     % Air gap (m)
     mingap = 0;
     
@@ -162,7 +162,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
 %-------------------------------------------
     
     % Minimum transformer efficiency
-    etaXfmer = 0.90;
+    etaXfmer = 0.50;
     % Max operating temp in Celsius
     TmaxX = 100;
     % Min operating temp in Celsius
@@ -182,7 +182,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Incremental layer of secondary winding
     IncreMlsX = 2;
     % Max allowable transformer weight (g)
-    MaxWeightX = 900;
+    MaxWeightX = 2000;
 
     % Winding Wire Copper Multiple to Decrease Copper Loss
     CuMultX = 1.1;
