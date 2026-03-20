@@ -4,7 +4,7 @@ global ResultX ResultL
 
 corelossfile = 'CoreLossData.xlsx';
 coresizefile = 'CoreSizeData.xlsx';
-coresizeSheetname = 'Ecore';
+coresizeSheetname = 'OwnedCores';
 
 raw1 = readcell(corelossfile,'Sheet','Freq');
 raw2 = readcell(corelossfile,'Sheet','Bfield');
@@ -73,25 +73,25 @@ raw = readcell(coresizefile,'Sheet',coresizeSheetname);
 
 Date = '11-13-25';
 % Quality factor
-Q_range = 0.9;
+Q_range = 0.1:0.1:1;
 % Resonant frequency
-f0_range = 3000;
+f0_range = 5000;
 % frequency of the transformer
-fs_range = 3100;
+fs_range = 5000;
 
 % Capacitance ratio (inverse of inductance ratio) (shouldn't be lower than 0.1,
 % since ZVS bandwidth becomes too small)
-A_range = [0.01,0.05];
+A_range = linspace(0.1,1,5);
 % DC input voltage range (unipolar peak) (if Vppeak is the param. to select around,
 % keep GT ~1, but optimal weight is usually achieved with tank gain of ~2)
-Vin_range = 100;
+Vin_range = 200;
 % Peak of the output voltage that one hope to achieve (V)
 % peak to peak is 2x this value
 Vo_range = 1e4;
 % Output power desired (W)
 Po_range = 100;
 % Turns ratio secondary/primary
-K_range = [90,95,100];
+K_range = 50:1:100;
 
 % Insulation
 %-------------------------------------------
@@ -436,38 +436,38 @@ if size(XfmerDesignArray)>1
     TurnRatio = ceil(bottleneckCheckX(:,8)./Np);
     
     checkVarBottleneck(eta_des, etaXfmer, NaN, ...
-        'Efficiency (η)', nTopX/2, 0.02);
+        'Efficiency (η)', nTopX/2+1, 0.02);
     checkVarBottleneck(T_des, TminX, TmaxX, ...
-        'Temperature T', nTopX/2, 1);
+        'Temperature T', nTopX/2+1, 1);
     if MinPriWindingX>1
         checkVarBottleneck(Np, MinPriWindingX, MaxPriWindingX, ...
-            'Primary turns Np', nTopX/2, 1);
+            'Primary turns Np', nTopX/2+1, 1);
     end
     checkVarBottleneck(Nlp, NaN, MaxMlpX, ...
-        'Primary layers Nlp', nTopX/2, 1);
+        'Primary layers Nlp', nTopX/2+1, 1);
     checkVarBottleneck(Nls, NaN, MaxMlsX, ...
-        'Secondary layers Nls', nTopX/2, 1);
+        'Secondary layers Nls', nTopX/2+1, 1);
     checkVarBottleneck(Weight, NaN, MaxWeightX, ...
-        'Transformer weight', nTopX/2, 10);
+        'Transformer weight', nTopX/2+1, 10);
     checkVarBottleneck(Packing, minpackingfactorX, maxpackingfactorX, ...
-        'Packing factor', nTopX/2, 0.1);
+        'Packing factor', nTopX/2+1, 0.1);
     checkVarBottleneck(PriDia_m, MinWireDia, NaN, ...
-        'Primary wire diameter', nTopX/2, 1e-4);
+        'Primary wire diameter', nTopX/2+1, 1e-4);
     checkVarBottleneck(Jpri, NaN, Jwmax, ...
-        'Primary current density Jpri', nTopX/2, 100);
+        'Primary current density Jpri', nTopX/2+1, 100);
     checkVarBottleneck(Jsec, NaN, Jwmax, ...
-        'Secondary current density Jsec', nTopX/2, 100);
+        'Secondary current density Jsec', nTopX/2+1, 100);
     if minLitzStrands>1
     checkVarBottleneck(NstrPri, minLitzStrands, NaN, ...
-        'Primary Litz strands', nTopX/2, 1);
+        'Primary Litz strands', nTopX/2+1, 1);
     end
     if minLitzStrands>1
     checkVarBottleneck(NstrSec, minLitzStrands, NaN, ...
-        'Secondary Litz strands', nTopX/2, 1);
+        'Secondary Litz strands', nTopX/2+1, 1);
     end
     if K_range(1)>1
     checkVarBottleneck(TurnRatio,K_range(1),K_range(end),...
-        'Turn Ratio N (Transformer-Calculated)', nTopX/2, 1);
+        'Turn Ratio N (Transformer-Calculated)', nTopX/2+1, 1);
     end
 end
 
@@ -543,35 +543,35 @@ if size(InductorDesignArray)>1
 
     if K_range(1)>1
     checkVarBottleneck(Out_K,K_range(1),K_range(end), ...
-        'Turn Ratio of Transformer (Inductor-Calculated)', nTopL/2, 1);
+        'Turn Ratio of Transformer (Inductor-Calculated)', nTopL/2+1, 1);
     end
     checkVarBottleneck(Out_A, A_range(1), A_range(end), ...
-        'Capacitance Ratio of Tank (A)', nTopL/2, 0.01);
+        'Capacitance Ratio of Tank (A)', nTopL/2+1, 0.01);
     checkVarBottleneck(Out_Q, Q_range(1), Q_range(end), ...
-        'Quality Factor of Tank (Q)', nTopL/2, 0.05);
+        'Quality Factor of Tank (Q)', nTopL/2+1, 0.05);
     checkVarBottleneck(etaL_des, etaInductor, NaN, ...
-        'Inductor efficiency (η)', nTopL/2, 0.02);
+        'Inductor efficiency (η)', nTopL/2+1, 0.02);
     checkVarBottleneck(TL, TminL, TmaxL, ...
-        'Inductor temperature T', nTopL/2, 1);
+        'Inductor temperature T', nTopL/2+1, 1);
     if MinWindingL>1
         checkVarBottleneck(NturnsL, MinWindingL, MaxWindingL, ...
-            'Inductor turns N', nTopL/2, 1);
+            'Inductor turns N', nTopL/2+1, 1);
     end
     checkVarBottleneck(MlL, NaN, MaxMlL, ...
-        'Inductor layers', nTopL/2, 1);
+        'Inductor layers', nTopL/2+1, 1);
     checkVarBottleneck(WeightL, NaN, MaxWeightL, ...
-        'Inductor weight', nTopL/2, 10);
+        'Inductor weight', nTopL/2+1, 10);
     checkVarBottleneck(PackingL, minpackingfactorL, maxpackingfactorL, ...
-        'Inductor packing factor', nTopL/2, 0.1);
+        'Inductor packing factor', nTopL/2+1, 0.1);
     checkVarBottleneck(WireDia_L, MinWireDia, NaN, ...
-        'Inductor wire diameter', nTopL/2, 1e-4);
+        'Inductor wire diameter', nTopL/2+1, 1e-4);
     checkVarBottleneck(J_L, NaN, Jwmax, ...
-        'Inductor current density J', nTopL/2, 100);
+        'Inductor current density J', nTopL/2+1, 100);
     checkVarBottleneck(GapL, mingap, NaN, ...
-        'Inductor gap length', nTopL/2, 1e-4);
+        'Inductor gap length', nTopL/2+1, 1e-4);
     if minLitzStrands > 1
         checkVarBottleneck(Nstr_L, minLitzStrands, NaN, ...
-            'Inductor Litz strands', nTopL/2, 1);
+            'Inductor Litz strands', nTopL/2+1, 1);
     end
 end
 
