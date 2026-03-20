@@ -12,20 +12,20 @@ colorcodes = [0.0, 0.4470, 0.7410;...
 filename = 'Weight of different VM structure.xlsx';
 
 % Create Structure
-field0  = 'NumberOfStage';
-field1  = 'TotalWeight';
-field2  = 'FlyingCapacitorValue';
-field3  = 'FlyingCapacitorVoltageRating';
-field4  = 'NumberOfFlyingCapacitorInSeries';
-field5  = 'NumberOfFlyingCapacitorInParallel';
-field6  = 'OutputCapacitorValue';
-field7  = 'OutputCapacitorVoltageRating';
-field8  = 'NumberOfOutputCapacitorInSeries';
-field9 = 'NumberOfOutputCapacitorInParallel';
-field10 = 'TotalCapacitance';
-field11 = 'FlyingCapEnergy';
-field12 = 'OutputCapEnergy';
-field13 = 'OutputImpedance';
+field1  = 'NumberOfStage';
+field2  = 'TotalWeight';
+field3  = 'FlyingCapacitorValue';
+field4  = 'FlyingCapacitorVoltageRating';
+field5  = 'NumberOfFlyingCapacitorInSeries';
+field6  = 'NumberOfFlyingCapacitorInParallel';
+field7  = 'OutputCapacitorValue';
+field8  = 'OutputCapacitorVoltageRating';
+field9  = 'NumberOfOutputCapacitorInSeries';
+field10 = 'NumberOfOutputCapacitorInParallel';
+field11 = 'TotalCapacitance';
+field12 = 'FlyingCapEnergy';
+field13 = 'OutputCapEnergy';
+field14 = 'OutputImpedance';
 
 HWCWinfo = struct(field0 ,{},field1 ,{},field2 ,{},field3 ,{},field4 ,{},field5 ,{},field6 ,{},field7,{},field8,{},field9,{},field10,{},field11,{},field12,{},field13,{});
 FWCWinfo = struct(field0 ,{},field1,{},field2,{},field3,{},field4,{},field5,{},field6,{},field7,{},field8,{},field9,{},field10,{},field11,{},field12,{},field13,{});
@@ -130,7 +130,7 @@ figure(2);
 Xplotrange = [min(min(FXaxis)), min(max(FXaxis, [], 2))];
 for i = 1:1:size(FXaxis, 1)
     line(FXAxis(i,:), FYaxis(i,:), 'Color', colorcodes(i,:),'linewidth',3);hold on;
-    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, ...
+    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, 
         'MarkerEdgeAlpha',1); hold on;
 end
 hold off; grid;
@@ -191,7 +191,7 @@ figure(3);
 Xplotrange = [min(min(FXaxis)), min(max(FXaxis, [], 2))];
 for i = 1:1:size(FXaxis, 1)
     line(FXAxis(i,:), FYaxis(i,:), 'Color', colorcodes(i,:),'linewidth',3);hold on;
-    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, ...
+    scatter(FXAxis(i,:), FYaxis(i,:),200,colorcodes(i,:),'filled', 'MarkerFaceAlpha',1, 
         'MarkerEdgeAlpha',1); hold on;
 end
 hold off; grid;
