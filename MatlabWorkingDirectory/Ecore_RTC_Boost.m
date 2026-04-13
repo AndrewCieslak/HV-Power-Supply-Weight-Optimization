@@ -184,7 +184,7 @@ KeepIndex    = intersect(intersect(KeepAirGap, Keep_Bmindex), Keep_fsindex);
 
 if isempty(KeepIndex)
     warning('No designs pass initial filters (airgap + Bsat + fs).');
-    y = zeros(1, 36);
+    y = zeros(1, 44);
     return;
 end
 
@@ -200,6 +200,9 @@ airgap = airgap(KeepIndex); Le   = Le(KeepIndex);
 Np     = Np(KeepIndex);    Mlp   = Mlp(KeepIndex);
 L      = L(KeepIndex);     fs    = fs(KeepIndex);
 Ipeak  = Ipeak(KeepIndex); Ilpeak = Ilpeak(KeepIndex);
+tring  = tring(KeepIndex); tlrise = tlrise(KeepIndex);
+trise  = trise(KeepIndex); thold  = thold(KeepIndex);
+tfall  = tfall(KeepIndex); T      = T(KeepIndex);
 Bm     = Bm_dummy(KeepIndex);
 Vinsulation_max = Vo;
 Vpri = Vo; % inductor sees output voltage
@@ -218,7 +221,7 @@ beta        = beta_range(matno_record,:) .* matfsIndex;
 
 if isempty(rowIdcs)
     warning('No Steinmetz data near operating frequency.');
-    y = zeros(1, 36);
+    y = zeros(1, 44);
     return;
 end
 
@@ -249,6 +252,12 @@ Mlp    = repelem(Mlp(UniqueRowIdcs), ColDuplicate);
 L      = repelem(L(UniqueRowIdcs), ColDuplicate);
 Ipeak  = repelem(Ipeak(UniqueRowIdcs), ColDuplicate);
 Ilpeak = repelem(Ilpeak(UniqueRowIdcs), ColDuplicate);
+tring  = repelem(tring(UniqueRowIdcs), ColDuplicate);
+tlrise = repelem(tlrise(UniqueRowIdcs), ColDuplicate);
+trise  = repelem(trise(UniqueRowIdcs), ColDuplicate);
+thold  = repelem(thold(UniqueRowIdcs), ColDuplicate);
+tfall  = repelem(tfall(UniqueRowIdcs), ColDuplicate);
+T      = repelem(T(UniqueRowIdcs), ColDuplicate);
 Bm     = repelem(Bm(UniqueRowIdcs), ColDuplicate);
 
 steinmetz_mask = reshape(matfsIndex(UniqueRowIdcs,:)', [], 1) > 0;
@@ -261,7 +270,7 @@ alpha = reshape(alpha(UniqueRowIdcs,:)', [], 1); alpha = alpha(steinmetz_mask);
 %% -------------------------------------------------------------------------------------
 
 if isempty(Po)
-    y = zeros(1, 36);
+    y = zeros(1, 44);
     return;
 end
 
@@ -506,7 +515,7 @@ if ~isempty(Index_Meet_All)
     Pri_StrandDiaMM = Pri_ds(idx) .* 1000;
     Pri_StrandAWG   = -39*log(Pri_StrandDiaMM ./ 0.127) ./ log(92) + 36;
 
-    Design = zeros(numel(idx), 36);
+    Design = zeros(numel(idx), 44);
     Design(:, 1)  = Po(idx);
     Design(:, 2)  = Vin(idx);
     Design(:, 3)  = Vo(idx);
@@ -543,10 +552,19 @@ if ~isempty(Index_Meet_All)
     Design(:,34)  = Volume;
     Design(:,35)  = CoreShape(idx);
     Design(:,36)  = Pri_StrandAWG;
+    % RTC timing outputs
+    Design(:,37)  = Ipeak(idx);
+    Design(:,38)  = Ilpeak(idx);
+    Design(:,39)  = trise(idx);
+    Design(:,40)  = thold(idx);
+    Design(:,41)  = tfall(idx);
+    Design(:,42)  = tring(idx);
+    Design(:,43)  = tlrise(idx);
+    Design(:,44)  = T(idx);
 
     y = Design;
 else
-    y = zeros(1, 36);
+    y = zeros(1, 44);
     disp('No feasible RTC boost inductor design found.');
 end
 
