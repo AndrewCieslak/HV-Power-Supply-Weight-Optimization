@@ -1,28 +1,101 @@
 clc, clear
 
-% Script only works for E cores for now
-% RTC test table is given in ComparisonTableRTC.xlsx
+% RTC Boost Inductor Design Driver
+% Designs a single-stage resonant transition boost inductor on an
+% E/ER/U/UR core. No voltage multiplier staging, no H-bridge, no cap bank.
 
-global FBdata Result
+%% User Inputs — Electrical
+%--------------------------------------------------------------------------
 
-Date = '10-1-25';
-Vin_range = 170;
-% Peak amplitude of the secondary voltage that one hope to achieve (V)
-Vo_range = 365;
-% Output power desired (W)
-Po_range = 45;
-% Winding Pattern Index: 1 inidcates center leg winding , 2 indicates double
+Date = '4-12-26';
+
+Vin = 18;          % Input DC voltage (V)
+Vo  = 100;          % Output voltage of RTC boost stage (V), must be > 2*Vin
+Po  = 100;         % Output power (W)
+
+% Winding Pattern: 1 = center leg, 2 = double leg
 Winding_Pattern = 1;
-% Hypothesis: record why you want to run the sim
-Hypothesis = 'xxx';
-% Notes: record any changes you made to the code
-Notes = 'xxx';
 
-PCBdensity = 0.0033; %g/mmmm
-TotalCap = 1; %uF
+Hypothesis = '';
+Notes = '';
 
-% Read the core loss xlsx
-corelossfile = 'CoreLossData.xlsx';
+%% User Inputs — RTC Parameters
+%--------------------------------------------------------------------------
+
+% Total parasitic capacitance at switch node (F)
+% (two GS66502T @ 40 pF + two C3D1P7060 @ 20 pF, with margin)
+Ctot = 160e-12;
+
+% Switching frequency bounds (Hz)
+fs_min = 1e6;
+fs_max = 5e6;
+
+%% User Inputs — Inductor Constraints
+%--------------------------------------------------------------------------
+
+etaInductor = 0.80;     % Minimum inductor efficiency
+Tmax        = 100;      % Max temperature (C)
+Tmin        = 25;       % Min temperature (C)
+MaxWeight   = 500;      % Max inductor weight (g)
+
+%% User Inputs — Air Gap Sweep
+%--------------------------------------------------------------------------
+
+mingap        = 1e-3;   % Minimum air gap (m)
+maxgap        = 3e-3;   % Maximum air gap (m)
+numGapsTested = 10;
+
+%% User Inputs — Turns and Layers
+%--------------------------------------------------------------------------
+
+MinWinding = 1;
+MaxWinding = 20;
+IncreN     = 1;
+MaxMl      = 4;
+IncreMl    = 1;
+
+%% User Inputs — Wire
+%--------------------------------------------------------------------------
+
+MinWireDia       = 0.25/1000;    % Minimum wire diameter (m), ~AWG30
+Jwmax            = 3e6;          % Max current density (A/m^2)
+CuMult           = 1.1;          % Copper area oversizing factor
+MinLitzStrandDia = 0.05024/1000; % Min litz strand diameter (m), AWG44
+minLitzStrands   = 1;            % Min number of parallel strands
+LitzFactor       = 0.8;          % Litz bundle copper fill fraction
+
+%% User Inputs — Insulation
+%--------------------------------------------------------------------------
+
+layerTapeUse   = true;
+enamelThickness = 20e-6;        % Per-side enamel thickness (m)
+kaptonDielStrength = 0.5*200e5; % Derated Kapton dielectric strength (V/m)
+kaptonThickness = 60e-6;        % Kapton tape thickness (m)
+MinTapeMargin  = 5e-4;          % Min tape overhang (m)
+kaptonDensity  = 1.42e6;        % Kapton density (g/m^3)
+
+CoreInsulationDensity = 2.2e6;  % Core sheath density, Teflon (g/m^3)
+WireInsulationDensity = 2.2e6;  % Wire jacket density, Teflon (g/m^3)
+dielectricstrength_insulation = 0.5*200e5; % Core insulation strength (V/m)
+
+%% User Inputs — Deratings
+%--------------------------------------------------------------------------
+
+BSAT_discount    = 0.85;
+CoreLossMultiple = 1.5;
+maxpackingfactor = 0.7;
+minpackingfactor = 0.01;
+
+%% Constants
+%--------------------------------------------------------------------------
+
+CopperDensity = 8.96e6;    % g/m^3
+rou           = 2.3e-8;    % Resistivity of copper at 100 C (ohm*m)
+u0            = 4*pi*1e-7; % Permeability of free space (H/m)
+
+%% Read Core Data
+%--------------------------------------------------------------------------
+
 raw1 = readcell('CoreLossData.xlsx','Sheet','Freq');
 raw2 = readcell('CoreLossData.xlsx','Sheet','Bfield');
 raw3 = readcell('CoreLossData.xlsx','Sheet','Ploss');
@@ -30,140 +103,53 @@ raw4 = readcell('CoreLossData.xlsx','Sheet','BSAT');
 raw5 = readcell('CoreLossData.xlsx','Sheet','MU');
 raw6 = readcell('CoreLossData.xlsx','Sheet','Density');
 
-% Read the core size xlsx
-coresizefile = 'CoreSizeData.xlsx';
-% Ecore is the larger, perhaps inaccurate dataset, while ReviewedCores is a
-% manually vetted selection of cores
 raw = readcell('CoreSizeData.xlsx','Sheet','ReviewedCores');
 
-% Read the FET and CAP xlsx
-FETCapfile = 'MOSFETs and Capacitor Masses.xlsx';
-FETsheetname = 'Component Masses_FETs';
-CAPsheetname = 'Component Masses_Capacitors';
+%% Run Design
+%--------------------------------------------------------------------------
 
-rawFET = readcell(FETCapfile,'Sheet',FETsheetname);
-[~,~] = size(rawFET);
-ColumnName = rawFET(1,:);
+G = Vo / Vin;
+if Vo <= 2*Vin
+    error('ZVS requires Vo > 2*Vin. Got Vo=%.1f, 2*Vin=%.1f.', Vo, 2*Vin);
+end
 
-Vsw_term = 'voltage rating';  % V
-Isw_term = 'current rating';  % A
-Wsw_term = 'avg. mass (g)';    % g
-Asw_term = 'Area (mm^2)';            % nm2
-
-Wsw = cell2mat(rawFET(2:end, (ismember(ColumnName, Wsw_term))));
-Isw = cell2mat(rawFET(2:end, (ismember(ColumnName, Isw_term))));
-Vsw = cell2mat(rawFET(2:end, (ismember(ColumnName, Vsw_term))));
-Asw = cell2mat(rawFET(2:end, (ismember(ColumnName, Asw_term))));
-
-rawCAP = readcell(FETCapfile,'Sheet',CAPsheetname);
-[m1,n1] = size(rawCAP);
-ColumnName = rawCAP(1,:);
-
-VCAP_term = 'Voltage (kV)';  % <V
-CAP_term = 'Capacitance (uF)';  % uF
-WCAP_term = 'Avg. mass (g)';  % g
-ACAP_term = 'Area (mm^2)';  % nm2
-
-WCAP = cell2mat(rawCAP(2:end, (ismember(ColumnName, WCAP_term))));
-CAP = cell2mat(rawCAP(2:end, (ismember(ColumnName, CAP_term))));
-VCAP = cell2mat(rawCAP(2:end, (ismember(ColumnName, VCAP_term)))) * 1000;
-ACAP = cell2mat(rawCAP(2:end, (ismember(ColumnName, ACAP_term))));
-
-% Processes each output voltage target
-%-----------------------------------------
-pcnt = 0.1;
 tic
+Result = Ecore_RTC_Boost( ...
+    Vin, G, Po, Winding_Pattern, ...
+    raw, raw1, raw2, raw3, raw4, raw5, raw6, ...
+    Ctot, fs_min, fs_max, ...
+    etaInductor, Tmax, Tmin, MaxWeight, ...
+    mingap, maxgap, numGapsTested, ...
+    MinWinding, MaxWinding, IncreN, MaxMl, IncreMl, ...
+    MinWireDia, Jwmax, CuMult, MinLitzStrandDia, minLitzStrands, LitzFactor, ...
+    layerTapeUse, enamelThickness, kaptonDielStrength, kaptonThickness, ...
+    MinTapeMargin, kaptonDensity, ...
+    CoreInsulationDensity, WireInsulationDensity, dielectricstrength_insulation, ...
+    BSAT_discount, CoreLossMultiple, maxpackingfactor, minpackingfactor, ...
+    CopperDensity, rou, u0);
+toc
 
-Result = zeros(length(Vo_range),35);
-FBdata = zeros(1,6);
-for i = 1:1:length(Vo_range)
-
-    % Per-stage output voltage chosen
-    %---------------------------------
-
-    for Va = linspace(2*Vin_range,Vo_range(i),10)
-        
-        % Per-stage spec.s
-
-        NumberOfStage = Vo_range(i)/Va;
-        G = Va/Vin_range;
-        Pa = Po_range/NumberOfStage;
-
-        % Run the Ecore Design for 1 stage
-
-        Succeed = Ecore_actualcore_E_Vectorize_Function_RTC( ...
-            Vin_range , G, Pa, Winding_Pattern, ...
-            raw,raw1,raw2,raw3,raw4,raw5,raw6);
-        if Succeed(1,28)>Result(i,28)
-            NumberOfCopies(i) = NumberOfStage;
-            
-            % Pick switches for full-bridge (per stage)
-    
-            VswIndex = find(Vsw >= 2*Va);
-            SWparallel = floor(4.*Pa/Va./Isw(VswIndex))+1;
-            SwitchWeight = 4*Wsw(VswIndex).*SWparallel;
-            [MinSwitchWeight(i), mi] = min(SwitchWeight);
-            SWarea(i) = 4*Asw(VswIndex(mi))*SWparallel(mi);
-    
-            % Select Capacitors (per stage)
-    
-            CAPseries = floor (2.*Va./VCAP) + 1;
-            CAPparallel = floor(TotalCap./(CAP./CAPseries)) + 1;
-            CAPWeight = WCAP.*CAPseries.*CAPparallel;
-            [MinCapWeight(i),mi] = min(CAPWeight);
-            CAParea(i) = ACAP(mi).*CAPseries(mi).*CAPparallel(mi)/2;
-            % ^assume each cap space has 2 soldered on.
-            % PCB weight
-    
-            % PCB weight (per stage) and total inverter weight
-    
-            PCBWeight(i) = 2*(SWarea(i) + CAParea(i))*PCBdensity;
-            FBinverterWeight(i) = MinSwitchWeight(i) + ...
-                MinCapWeight(i) + PCBWeight(i);
-     
-            FBdata(i,:) = [NumberOfCopies(i),MinSwitchWeight(i),...
-                MinCapWeight(i),PCBWeight(i),FBinverterWeight(i),...
-                FBinverterWeight(i)*NumberOfCopies(i)];
-
-            Result(i,:)=Succeed;
-        end
-    end
-
-    sortrows(FBdata,6,'ascend');
-    OutputFB(i,:) = FBdata(1,:);
-
-    sortrows(Result,28,"ascend");
-    OutputL(i,:) = Result(1,:);
-
-    if i>=pcnt*length(Vo_range)
-        pcnt=pcnt+0.1;
-        fprintf("%d Percent Complete \n",round(i*100/length(Vo_range)));
-    end
+if all(Result == 0)
+    error('No feasible inductor design found. Relax constraints or check inputs.');
 end
 
 %% File Output
+%--------------------------------------------------------------------------
 
-filename = strcat (Date, '_' , 'RTC_inductor.xlsx');
-SheetNumber = 1;
-Infosheetname = strcat('SimInfo', num2str(SheetNumber));
-ResultDatasheetname = strcat('ResultsData',num2str(SheetNumber));
-FBinvertersheetname = strcat('FBData',num2str(SheetNumber));
-% RunNumber always starts with 1
-RunNumber = 1;
-% File output configuration
+filename = strcat(Date, '_', 'RTC_boost_inductor.xlsx');
+
+% Save input parameters
 field1 = 'name';
 value1_req = {'Date','Hypothesis','Notes',...
-    'Vin_range(V)','G_range(V)','Po_range(W)',...
-    'Vo_range(V)','Winding_Pattern'};
+    'Vin (V)','Vo (V)','Po (W)','G','Winding_Pattern', ...
+    'Ctot (F)','fs_min (Hz)','fs_max (Hz)'};
 field2 = 'data';
-value2_req = {Date,Hypothesis, Notes,...
-    Vin_range,G,Po_range,Vo_range,...
-    Winding_Pattern};
-Requirement = struct(field1,value1_req,field2,value2_req);
+value2_req = {Date, Hypothesis, Notes, ...
+    Vin, Vo, Po, G, Winding_Pattern, ...
+    Ctot, fs_min, fs_max};
+Requirement = struct(field1, value1_req, field2, value2_req);
 fn   = fieldnames(Requirement);
 vals = struct2cell(Requirement);
-
-% Places input variable ranges and values in sheet named "SimInfo"
 for i = 1:numel(vals)
     v = vals{i};
     if isnumeric(v) || islogical(v)
@@ -175,43 +161,32 @@ for i = 1:numel(vals)
     end
 end
 T = table(fn, vals, 'VariableNames', {'Field','Value'});
-writetable(T, filename, 'Sheet', Infosheetname, 'WriteVariableNames', true);
+writetable(T, filename, 'Sheet', 'SimInfo', 'WriteVariableNames', true);
 
-blankTbl = cell2table(cell(0,1));
-blankTbl.Properties.VariableNames = {'_'};
-writetable(blankTbl, filename, 'Sheet', FBinvertersheetname, 'WriteVariableNames', false);
-writetable(blankTbl, filename, 'Sheet', ResultDatasheetname, 'WriteVariableNames', false);
+% Save inductor results
+OutputTableL = array2table(Result, 'VariableNames', { ...
+    'Po (W)', 'Vin (V)', 'Vo (V)', 'Vinsulation_max (V)', ...
+    'fs (Hz)', 'matno', 'CoreMatFreq (Hz)', ...
+    'CenterL (m)', 'CenterT (m)', 'CoreAc (m2)', ...
+    'CoreWindowH (m)', 'CoreWindowW (m)', 'NumOfPri', ...
+    'BcoreDensity (T)', 'WirePriDia_AWG', 'WirePriFullDia (m)', ...
+    'WirePri_Idensity (A/m2)', 'WirePriNstrands', ...
+    'WirePri_per_layer', 'WirePri_Nlayer', ...
+    'CopperPackingFactor', 'PackingFactor', ...
+    'LossCore (W)', 'LossCopper (W)', ...
+    'WeightCore (g)', 'WeightPri_copper (g)', ...
+    'WeightPri_Insu (g)', 'WeightCore_Insu (g)', ...
+    'TotalWeight (g)', 'TempAbsolute (C)', ...
+    'L (H)', 'airgap (m)', 'CoreIndex', 'Volume (m3)', ...
+    'Core Shape Index', 'Strand dia (AWG)'});
 
-OutputTableFB = array2table(FBdata,'VariableNames',{'Number of Stages', ...
-    'Min Switch Weight (g)','Min Capacitor Weight (g)','PCB Weight (g)' ...
-    ,'1 Stage Weight (g)','Total Weight (g)'});
-arrFB = table2array(OutputTableFB);
-OutputTableFB = OutputTableFB(~all(arrFB == 0, 2), :);
-OutputTableFB = sortrows(OutputTableFB,'Total Weight (g)','ascend');
-
-FBcelX = readcell(filename,'Sheet',FBinvertersheetname);
-[row,col] = size(FBcelX);
-writecell(repmat({''},row,col),filename,'Sheet',FBinvertersheetname);
-writetable(OutputTableFB,filename,'Sheet',FBinvertersheetname);
-
-OutputTableL = array2table(Result, 'VariableNames', {'Po(W)', 'Vin(V)' , ...
-    'Va(V)' , 'Vinsulation_ max (V)' , 'fs (Hz)' , 'matno',...
-    'CoreMatFreq(Hz)', 'CenterL (m)','CenterT (m)', 'CoreAc(m2)','CoreWindowH(m)',...
-    'CoreWindowW(m)','NumOfPri','BcoreDensity(T)', 'WirePriDia(m)', ...
-    'WirePriFullDia(m)','WirePri_Idensity (A/m2)','WirePriNstrands', ...
-    'WirePri_per_layer', 'WirePri_Nlayer','CopperPackingFactor' , ...
-    'PackingFactor', 'LossCore(W)','LossCopper(W)' , 'WeightCore(g)', ...
-    'WeightPri_copper (g)' , 'WeightPri_Insu(g)','WeightCore_Insu(g)', ...
-    'TotalWeight(g)', 'TempAbsolute(C)' , 'L' , 'airgap(m)','CoreIndex', ...
-    'Volume(m^3)','Core Shape Index'});
 arrL = table2array(OutputTableL);
 OutputTableL = OutputTableL(~all(arrL == 0, 2), :);
-OutputTableL = sortrows(OutputTableL,'TotalWeight(g)','ascend');
+OutputTableL = sortrows(OutputTableL, 'TotalWeight (g)', 'ascend');
+writetable(OutputTableL, filename, 'Sheet', 'ResultsData');
 
-LcelX = readcell(filename,'Sheet',ResultDatasheetname);
-[row,col] = size(LcelX);
-writecell(repmat({''},row,col),filename,'Sheet',ResultDatasheetname);
-writetable(OutputTableL, filename, 'Sheet', ResultDatasheetname);
-
-
-toc
+fprintf('Best inductor weight: %.2f g\n', OutputTableL{1,'TotalWeight (g)'});
+fprintf('Switching frequency:  %.2f MHz\n', OutputTableL{1,'fs (Hz)'}/1e6);
+fprintf('Inductance:           %.2f uH\n', OutputTableL{1,'L (H)'}*1e6);
+fprintf('Litz strands:         %d\n', OutputTableL{1,'WirePriNstrands'});
+fprintf('Results saved to %s\n', filename);
