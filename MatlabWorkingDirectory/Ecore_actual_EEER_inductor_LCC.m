@@ -43,6 +43,16 @@ NoMat = m1-1;
 FreqFlag = zeros(size(1:1:NoMat));
 % Sweeps all of the materials. This is the core loss curve fitting loop for
 % each material. It processes the datasheet parameters into Steinmetz parameters.
+maxFreqPairs = floor((size(LCoreFreq,2))/2);
+ConstantA      = zeros(NoMat, maxFreqPairs);
+ConstantB      = zeros(NoMat, maxFreqPairs);
+B_atPv_500     = zeros(NoMat, maxFreqPairs);
+F_atPv_500     = zeros(NoMat, maxFreqPairs);
+PF_atPv_500    = zeros(NoMat, maxFreqPairs);
+beta_range     = zeros(NoMat, maxFreqPairs);
+XCorePloss_3rd = zeros(NoMat, maxFreqPairs);
+alpha_range    = zeros(NoMat, maxFreqPairs);
+K1_range       = zeros(NoMat, maxFreqPairs);
 for i = 1:1:NoMat
     % Obtains all frequency values for the material, ignoring NaN values.
     DataSheetFreq = LCoreFreq(i,~isnan(LCoreFreq(i,:)));
@@ -350,7 +360,7 @@ else
     Pri_WireDia=max(MinWireDia,dsolid);
     idLitz=~useSolid;
     if any(idLitz)
-        Pri_WireDia(idLitz)=2.*sqrt(Pri_Nstrands(idLitz).*Astrand(idLitz).*LitzFactor./pi);
+        Pri_WireDia(idLitz)=2.*sqrt(Pri_Nstrands(idLitz).*Astrand(idLitz)./(LitzFactor.*pi));
     end
     
     % Strand diameter
@@ -415,7 +425,7 @@ else
     %--------------------------------------------------------
 
     PriKlayer=sqrt(pi.*Pri_Nstrands).*Pri_ds./(2.*Pri_WireDia);
-    Pri_xp=Pri_ds./(sqrt(pi.*PriKlayer).*2.*skindepth);
+    Pri_xp=Pri_ds./(2.*skindepth).*(sqrt(pi.*PriKlayer));
 
     % Fixed overestimation by litzfactor
     Pri_Rdc = rou.*TLp./(Pri_Nstrands.*(pi.*Pri_ds.^2./4));
