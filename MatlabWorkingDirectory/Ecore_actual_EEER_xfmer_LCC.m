@@ -357,7 +357,7 @@ else
     Pri_WireDia=max(MinWireDia,dsolid_p);
     idx=~useSolid_p;
     if any(idx)
-        Pri_WireDia(idx)=2.*sqrt(Pri_Nstrands(idx).*Astrand(idx).*LitzFactor./pi);
+        Pri_WireDia(idx)=2.*sqrt(Pri_Nstrands(idx).*Astrand(idx)./(LitzFactor.*pi));
     end
 
     % Primary wire strand diameter
@@ -522,10 +522,10 @@ else
     %--------------------------------------------------------
 
     PriKlayer = sqrt(pi.*Pri_Nstrands).*Pri_ds./(2.*Pri_WireDia);
-    Pri_xp = Pri_ds./(sqrt(pi.*PriKlayer).*2.*skindepth);
+    Pri_xp = Pri_ds./(2.*skindepth).*(sqrt(pi.*PriKlayer));
 
     SecKlayer = sqrt(pi.*Sec_Nstrands).*Sec_ds./(2.*Sec_WireDia);
-    Sec_xp = Sec_ds./(sqrt(pi.*SecKlayer).*2.*skindepth);
+    Sec_xp = Sec_ds./(2.*skindepth).*(sqrt(pi.*SecKlayer));
 
     % Rdc based on actual conductor cross-section (litz strands or solid)
     Pri_Rdc = rou .* TLp ./ (Pri_Nstrands .* (pi .* Pri_ds.^2 ./ 4));
