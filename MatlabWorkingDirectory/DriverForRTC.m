@@ -28,15 +28,15 @@ Ctot = 160e-12;
 
 % Switching frequency bounds (Hz)
 fs_min = 1e6;
-fs_max = 5e6;
+fs_max = 3e6;
 
 %% User Inputs — Inductor Constraints
 %--------------------------------------------------------------------------
 
-etaInductor = 0.80;     % Minimum inductor efficiency
+etaInductor = 0.95;     % Minimum inductor efficiency
 Tmax        = 100;      % Max temperature (C)
 Tmin        = 25;       % Min temperature (C)
-MaxWeight   = 500;      % Max inductor weight (g)
+MaxWeight   = 1000;      % Max inductor weight (g)
 
 %% User Inputs — Air Gap Sweep
 %--------------------------------------------------------------------------
@@ -62,7 +62,7 @@ Jwmax            = 3e6;          % Max current density (A/m^2)
 CuMult           = 1.1;          % Copper area oversizing factor
 MinLitzStrandDia = 0.05024/1000; % Min litz strand diameter (m), AWG44
 minLitzStrands   = 1;            % Min number of parallel strands
-maxLitzStrands   = 19;
+maxLitzStrands   = 19;           % Max number of parallel strands
 LitzFactor       = 0.8;          % Litz bundle copper fill fraction
 
 %% User Inputs — Insulation
@@ -179,7 +179,10 @@ OutputTableL = array2table(Result, 'VariableNames', { ...
     'WeightPri_Insu (g)', 'WeightCore_Insu (g)', ...
     'TotalWeight (g)', 'TempAbsolute (C)', ...
     'L (H)', 'airgap (m)', 'CoreIndex', 'Volume (m3)', ...
-    'Core Shape Index', 'Strand dia (AWG)'});
+    'Core Shape Index', 'Strand dia (AWG)', ...
+    'Ipeak (A)', 'Ilpeak (A)', ...
+    'trise (s)', 'thold (s)', 'tfall (s)', ...
+    'tring (s)', 'tlrise (s)', 'T (s)'});
 
 arrL = table2array(OutputTableL);
 OutputTableL = OutputTableL(~all(arrL == 0, 2), :);
@@ -190,4 +193,12 @@ fprintf('Best inductor weight: %.2f g\n', OutputTableL{1,'TotalWeight (g)'});
 fprintf('Switching frequency:  %.2f MHz\n', OutputTableL{1,'fs (Hz)'}/1e6);
 fprintf('Inductance:           %.2f uH\n', OutputTableL{1,'L (H)'}*1e6);
 fprintf('Litz strands:         %d\n', OutputTableL{1,'WirePriNstrands'});
+fprintf('Ipeak:                %.2f A\n', OutputTableL{1,'Ipeak (A)'});
+fprintf('Ilpeak:               %.4f A\n', OutputTableL{1,'Ilpeak (A)'});
+fprintf('trise:                %.1f ns\n', OutputTableL{1,'trise (s)'}*1e9);
+fprintf('thold:                %.1f ns\n', OutputTableL{1,'thold (s)'}*1e9);
+fprintf('tfall:                %.1f ns\n', OutputTableL{1,'tfall (s)'}*1e9);
+fprintf('tring:                %.1f ns\n', OutputTableL{1,'tring (s)'}*1e9);
+fprintf('tlrise:               %.1f ns\n', OutputTableL{1,'tlrise (s)'}*1e9);
+fprintf('Period:               %.1f ns\n', OutputTableL{1,'T (s)'}*1e9);
 fprintf('Results saved to %s\n', filename);
