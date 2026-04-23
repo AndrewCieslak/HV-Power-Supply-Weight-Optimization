@@ -2,9 +2,9 @@ clc, clf, clear
 
 global ResultX ResultL
 
-corelossfile = 'CoreLossData.xlsx';
+corelossfile = 'CoreLossDataOLD.xlsx';
 coresizefile = 'CoreSizeData.xlsx';
-coresizeSheetname = 'Ecore';
+coresizeSheetname = 'ReviewedCores';
 
 raw1 = readcell(corelossfile,'Sheet','Freq');
 raw2 = readcell(corelossfile,'Sheet','Bfield');
@@ -75,13 +75,13 @@ Date = '3-19-26';
 % Quality factor
 Q_range = 0.1:0.1:1;
 % Resonant frequency
-f0_range = 5000;
+f0_range = 3000;
 % frequency of the transformer
-fs_range = 5000;
+fs_range = 3000;
 
 % Capacitance ratio (inverse of inductance ratio) (shouldn't be lower than 0.1,
 % since ZVS bandwidth becomes too small)
-A_range = linspace(0.1,1,5);
+A_range = linspace(0.1,0.1,1);
 % DC input voltage range (unipolar peak) (if Vppeak is the param. to select around,
 % keep GT ~1, but optimal weight is usually achieved with tank gain of ~2)
 Vin_range = 200;
@@ -91,7 +91,9 @@ Vo_range = 2.5e4;
 % Output power desired (W)
 Po_range = 100;
 % Turns ratio secondary/primary
-K_range = 50:1:100;
+K_range = 100;
+% Parallel input, series output transformers being stacked
+numStacked = 1:10;
 
 % Insulation
 %-------------------------------------------
@@ -115,7 +117,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
 %-------------------------------------------
 
     % Lowest allowed inductor efficiency
-    etaInductor = 0.50;
+    etaInductor = 0.9;
     % Max allowable temperature (C)
     TmaxL = 100;
     % Min allowable temperature (C)
@@ -133,14 +135,14 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Maximum turns
     MaxWindingL = 100;
     % Incremental winding
-    IncreNL = 5;
+    IncreNL = 1;
     % Maximum layer of winding
     MaxMlL = 20;
     % Incremental layers. The layers of a transformer reference each wrap of
     % turns that fills the window height before moving on to the next level.
     % Once one layer fills, the next layer is wound on top, seperated by an
     % insulation layer.
-    IncreMlL = 2;
+    IncreMlL = 1;
 
     % Copper wire multiple to reduce resistive losses
     CuMultL = 1.1;
@@ -153,7 +155,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Actual core loss is always higher than the calculated
     CoreLossMultipleL = 1;
     % Maximum packing factor (copper area compared with total window area)
-    maxpackingfactorL = 0.7;
+    maxpackingfactorL = 0.95;
     % Minimum packing factor
     minpackingfactorL = 0.01;
 
@@ -162,7 +164,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
 %-------------------------------------------
     
     % Minimum transformer efficiency
-    etaXfmer = 0.50;
+    etaXfmer = 0.9;
     % Max operating temp in Celsius
     TmaxX = 100;
     % Min operating temp in Celsius
@@ -172,7 +174,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Maximum primary windings
     MaxPriWindingX = 200;
     % Incremental primary winding
-    IncreNpX = 5;
+    IncreNpX = 1;
     % Maximum layer of primary winding
     MaxMlpX = 5;
     % Incremental layer of primary winding
@@ -180,7 +182,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
     % Maximum layer of secondary winding
     MaxMlsX = 30;
     % Incremental layer of secondary winding
-    IncreMlsX = 2;
+    IncreMlsX = 1;
     % Max allowable transformer weight (g)
     MaxWeightX = 2000;
 
@@ -194,7 +196,7 @@ dielectricstrength_insulation = 0.5 * 200e5;
     BSAT_discountX = 0.75;
     % Core loss multiplier
     CoreLossMultipleX = 1;
-    maxpackingfactorX = 0.7;
+    maxpackingfactorX = 0.95;
     minpackingfactorX = 0.01;
 
 
@@ -228,8 +230,6 @@ Winding_Pattern = 1;
 Hypothesis ='';
 % Notes: record any changes you made to the code
 Notes ='';
-
-
 
 %% File Output
 %-------------------------------------------------------------------------------
@@ -338,6 +338,8 @@ fs = fs(KeepIndex);
 %-------------------------------------------
 pcnt = 0.1;
 tic
+SuceedX = zeros(1,43);
+bestnumStacked = 0;
 for i = 1:length(Q)
     
     % Peak voltage applied to primary from the input and resonant tank gain.
@@ -348,7 +350,13 @@ for i = 1:length(Q)
     Vinsulation_max = Vsec;
 
     % Parallel capacitive reactance
-    XCp = 1/(2.*pi.*fs.*Cp);
+    XCp = 1./(2.*pi.*fs.*Cp);
+
+    % Turn constant inputs into an array
+    constantsXfmer = {Vinsulation_max,Winding_Pattern,layerTapeUse,enamelThickness,kaptonDielStrength,kaptonThickness,MinTapeMargin,...
+        kaptonDensity,CoreInsulationDensity,WireInsulationDensity,dielectricstrength_insulation,BSAT_discountX,CoreLossMultipleX,...
+        maxpackingfactorX,minpackingfactorX,LitzFactor,MinWireDia,Jwmax,MinLitzStrandDia,CopperDensity,rou,...
+        u0,XCp,minLitzStrands,CuMultX,numStacked};
 
     % Run Xfmer design, return design vector. All CoreLoss and CoreSize
     % data is passed, along with primary voltage, secondary voltage, output
@@ -357,15 +365,22 @@ for i = 1:length(Q)
     % here. Only the GT and K are relevant for the transformer design and
     % are what are being sweeped within this for loop through Vpri, Vinsulation_max,
     % and Vsec.
-    SuceedX = Ecore_actual_EEER_xfmer_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6,...
-        Vpri, Vsec, Po_range, fs_range, Vinsulation_max, Winding_Pattern,...
-        layerTapeUse,enamelThickness,kaptonDielStrength,kaptonThickness,...
-        MinTapeMargin,kaptonDensity,CoreInsulationDensity,WireInsulationDensity, ...
-        dielectricstrength_insulation,etaXfmer,TmaxX,TminX,MinPriWindingX, ...
-        MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
-        BSAT_discountX,CoreLossMultipleX,maxpackingfactorX,minpackingfactorX, ...
-        LitzFactor,MinWireDia,Jwmax,MinLitzStrandDia,CopperDensity,rou,u0,XCp, ...
-        minLitzStrands,CuMultX);
+    for n = length(numStacked)
+        
+        constantsXfmer{1} = Vinsulation_max/numStacked(n);
+        VsecX = Vsec/numStacked(n);
+        Po_rangeX = Po_range/numStacked(n);
+        
+        SuceedXtemp = Ecore_actual_EEER_xfmer_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6,...
+            Vpri, VsecX, Po_rangeX, fs_range,etaXfmer,TmaxX,TminX,MinPriWindingX, ...
+            MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX,constantsXfmer);
+
+        if SuceedXtemp(1,36)~=0 && SuceedXtemp(1,36)*numStacked(n)>SuceedX(1,36)*bestnumStacked
+            SuceedX = SuceedXtemp;
+            bestnumStacked = numStacked(n);
+        end
+                
+    end
     
     % Run Inductor design, return design table. All CoreLoss and CoreSize
     % data is passed, along with input voltage range (DC), output power
@@ -388,16 +403,12 @@ for i = 1:length(Q)
     ResultX(end+1,:) = SuceedX(1,:);
     ResultL(end+1,:) = SuceedL(1,:);
 
-    % Sliced variables in parallel loops allow this ResultX and ResultL to exist outside the
-    % parfor loop.
-
     if i>=pcnt*length(Q)
         pcnt=pcnt+0.1;
         fprintf("%d Percent Complete \n",round(i*100/length(Q)));
     end
 end
 toc
-
 
 
 % Results output
@@ -413,7 +424,7 @@ XfmerDesignArray = sortrows(XfmerDesignArray,36,'ascend');
 
 % Transformer Design Checker
 % Checks the best 20 rows
-if size(XfmerDesignArray)>1
+if ~isempty(XfmerDesignArray)
     nTopX = min(20,size(XfmerDesignArray,1));
     bottleneckCheckX = XfmerDesignArray(1:nTopX,:);
     
@@ -509,6 +520,8 @@ else
     weightX = 0;
 end
 fprintf("Transformer Weight is %.2f g",weightX);
+fprintf("Best number of stacked transformers is %.2d",bestnumStacked);
+
 
 % Deletes rows of zeros, and then sorts by weight
 InductorDesignArray = ResultL(~all(ResultL == 0, 2), :);
