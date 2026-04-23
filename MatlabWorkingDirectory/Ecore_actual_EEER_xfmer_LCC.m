@@ -1,14 +1,12 @@
 function y = Ecore_actual_EEER_xfmer_LCC(raw,raw1,raw2,raw3,raw4,raw5,raw6, ...
-    Vppeak_range, Vspeak_range, Po_range, fs_range, Vinsulation_max_range,...
-    Winding_Pattern,layerTapeUse,enamelThickness,kaptonDielStrength,kaptonThickness,...
-    MinTapeMargin,kaptonDensity,CoreInsulationDensity,WireInsulationDensity,dielectricstrength_insulation, ...
-    etaXfmer,TmaxX,TminX,MinPriWindingX,MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
-    BSAT_discountX,CoreLossMultipleX,maxpackingfactorX,minpackingfactorX,LitzFactor,MinWireDia,...
-    Jwmax,MinLitzStrandDia,CopperDensity,rou,u0,XCp,minLitzStrands,CuMultX)
+    Vppeak_range, Vspeak_range, Po_range, fs_range,etaXfmer,TmaxX,TminX,MinPriWindingX,MaxPriWindingX,IncreNpX,MaxMlpX,IncreMlpX,MaxMlsX,IncreMlsX,MaxWeightX, ...
+    constantsXfmer)
 
 % Body of function
 %% --------------------------------------------------------------------------------------
 
+% Add variation to Vspeak_range dependent upon numStacked, but take into
+% account the change to the array size
 [m1,n1] = size(raw1);
 XCoreMAT = raw1(2:m1,2); %#ok<NASGU>
 XCoreFreq = cell2mat(raw1(2:m1,3:n1));
@@ -136,7 +134,7 @@ CoreMatIndexSweep = find(FreqFlag);
 % -------------------------------------
 
 [Po, fs, Vppeak, Vspeak, Vinsulation_max, matno_record, ShuffleXcoreIndex, Np, Mlp, Mls] = ndgrid( ...
-    Po_range, fs_range, Vppeak_range, Vspeak_range, Vinsulation_max_range, ...
+    Po_range, fs_range, Vppeak_range, Vspeak_range, constantsXfmer{1}, ...
     CoreMatIndexSweep, ShuffleIndex, MinPriWindingX:IncreNpX:MaxPriWindingX, ...
     1:IncreMlpX:MaxMlpX, 1:IncreMlsX:MaxMlsX);
 
@@ -169,7 +167,7 @@ XcoreCoreShapeIndex = XcoreCoreShapeIndex(ShuffleXcoreIndex);
 
 % Quick BSAT feasibility using datasheet formula
 Bm_dummy = Vppeak./(pi.*fs.*2.*Np.*Ac);
-Keep_Bmindex = find(Bm_dummy < BSAT*BSAT_discountX);
+Keep_Bmindex = find(Bm_dummy < BSAT*constantsXfmer{12});
 KeepIndex = Keep_Bmindex;
 
 % 1st Filter
@@ -200,7 +198,7 @@ Mls                  = Mls(KeepIndex);
 
 if isempty(Po)
     fprintf('Bm_dummy range: %.3f .. %.3f T\n', min(Bm_dummy), max(Bm_dummy));
-    fprintf('BSAT*0.75 range: %.3f .. %.3f T\n', min(BSAT*BSAT_discountX), max(BSAT*BSAT_discountX));
+    fprintf('BSAT*0.75 range: %.3f .. %.3f T\n', min(BSAT*constantsXfmer{12}), max(BSAT*constantsXfmer{12}));
     warning(['Empty. Every candidate design violates the B-SAT screening.' ...
         'Increase transformer geometry size (likely), or Increase Np range, ' ...
         'or loosen other ranges, or ensure units match. Try again \n']);
@@ -295,11 +293,11 @@ else
     % Electricals & losses
     % -------------------------------------
 
-    skindepth = 1./sqrt(pi*fs*u0/rou);
+    skindepth = 1./sqrt(pi*fs*constantsXfmer{22}/constantsXfmer{21});
     Ns = ceil(Np.*(Vspeak./Vppeak));
 
     % Magnetizing inductance (computed early for magnetizing current)
-    Lm = ui.*u0.*Ac.*Np.^2./Le;
+    Lm = ui.*constantsXfmer{22}.*Ac.*Np.^2./Le;
 
     % Primary Current (including magnetizing current)
     Iload_rms = (Po/etaXfmer)./(Vppeak/sqrt(2));
@@ -324,25 +322,25 @@ else
     % Calculate core loss (W)
     % -------------------------------------
 
-    Pcore = CoreLossMultipleX.*Ve.*K1.*fs.^alpha.*Bm.^beta;
+    Pcore = constantsXfmer{13}.*Ve.*K1.*fs.^alpha.*Bm.^beta;
 
     % Determine wire type, and num of strands if Litz/Parallel
     % -----------------------------------------------
 
     % Required Copper Cross-Section
-    Areq_p=CuMultX.*Iprms./Jwmax;                                % [m^2]
-    Areq_s=CuMultX.*Isrms./Jwmax;                                % [m^2]
+    Areq_p=constantsXfmer{25}.*Iprms./constantsXfmer{18};                                % [m^2]
+    Areq_s=constantsXfmer{25}.*Isrms./constantsXfmer{18};                                % [m^2]
     
     % Required Total Copper Diameter
-    dsolid_p=max(MinWireDia,2.*sqrt(Areq_p./pi));                       % [m]
-    dsolid_s=max(MinWireDia,2.*sqrt(Areq_s./pi));                       % [m]
+    dsolid_p=max(constantsXfmer{17},2.*sqrt(Areq_p./pi));                       % [m]
+    dsolid_s=max(constantsXfmer{17},2.*sqrt(Areq_s./pi));                       % [m]
     
     % Solid-Core Choice
     useSolid_p=(dsolid_p<=2.*skindepth);
     useSolid_s=(dsolid_s<=2.*skindepth);
     
     % Required Strand Copper Diameter & Cross-Section
-    MinLitzStrandDia_vec = MinLitzStrandDia*ones(length(skindepth),1);
+    MinLitzStrandDia_vec = constantsXfmer{19}*ones(length(skindepth),1);
     dstrandMinlitz=max(MinLitzStrandDia_vec,2.*skindepth);          % [m]
     Astrand=pi.*(dstrandMinlitz./2).^2;                   % [m^2]
     
@@ -351,23 +349,23 @@ else
 
     % Primary wire number of strands
     Pri_Nstrands=ones(size(Iprms));
-    Pri_Nstrands(~useSolid_p)=max(minLitzStrands,ceil(Areq_p(~useSolid_p)./Astrand(~useSolid_p)));
+    Pri_Nstrands(~useSolid_p)=max(constantsXfmer{24},ceil(Areq_p(~useSolid_p)./Astrand(~useSolid_p)));
 
     % Primary wire uninsulated diameter
-    Pri_WireDia=max(MinWireDia,dsolid_p);
+    Pri_WireDia=max(constantsXfmer{17},dsolid_p);
     idx=~useSolid_p;
     if any(idx)
-        Pri_WireDia(idx)=2.*sqrt(Pri_Nstrands(idx).*Astrand(idx)./(LitzFactor.*pi));
+        Pri_WireDia(idx)=2.*sqrt(Pri_Nstrands(idx).*Astrand(idx)./(constantsXfmer{16}.*pi));
     end
 
     % Primary wire strand diameter
-    Pri_ds=max(MinWireDia,dsolid_p);
+    Pri_ds=max(constantsXfmer{17},dsolid_p);
     Pri_ds(idx)=dstrandMinlitz(idx);
 
     % Wire Jacket or Magnet Enamel (if using layer tape)
-    Pri_FullWireDia = Pri_WireDia + 2.*Vppeak./dielectricstrength_insulation;
-    if layerTapeUse
-        Pri_FullWireDia = Pri_WireDia + enamelThickness.*2;
+    Pri_FullWireDia = Pri_WireDia + 2.*Vppeak./constantsXfmer{11};
+    if constantsXfmer{3}
+        Pri_FullWireDia = Pri_WireDia + constantsXfmer{4}.*2;
     end
 
     % Secondary
@@ -375,39 +373,39 @@ else
 
     % Secondary wire number of strands
     Sec_Nstrands=ones(size(Isrms));
-    Sec_Nstrands(~useSolid_s)=max(minLitzStrands,ceil(Areq_s(~useSolid_s)./Astrand(~useSolid_s)));
+    Sec_Nstrands(~useSolid_s)=max(constantsXfmer{24},ceil(Areq_s(~useSolid_s)./Astrand(~useSolid_s)));
 
     % Secondary wire uninsulated diameter
-    Sec_WireDia=max(MinWireDia,dsolid_s);
+    Sec_WireDia=max(constantsXfmer{17},dsolid_s);
     idx=~useSolid_s;
     if any(idx)
-        Sec_WireDia(idx)=2.*sqrt(Sec_Nstrands(idx).*Astrand(idx).*LitzFactor./pi);
+        Sec_WireDia(idx)=2.*sqrt(Sec_Nstrands(idx).*Astrand(idx).*constantsXfmer{16}./pi);
     end
 
     % Secondary wire strand diameter
-    Sec_ds=max(MinWireDia,dsolid_s);
+    Sec_ds=max(constantsXfmer{17},dsolid_s);
     Sec_ds(idx)=dstrandMinlitz(idx);
 
     % Wire Jacket or Magnet Enamel (if using layer tape)
-    Sec_FullWireDia = Sec_WireDia + 2.*Vspeak./dielectricstrength_insulation;
-    if layerTapeUse
-        Sec_FullWireDia = Sec_WireDia + enamelThickness.*2;
+    Sec_FullWireDia = Sec_WireDia + 2.*Vspeak./constantsXfmer{11};
+    if constantsXfmer{3}
+        Sec_FullWireDia = Sec_WireDia + constantsXfmer{4}.*2;
     end
 
     % Winding structure
     % --------------------
     
-    CoreInsulationThickness = Vinsulation_max./dielectricstrength_insulation;
+    CoreInsulationThickness = Vinsulation_max./constantsXfmer{11};
     % Why is this calculated here and in the winding pattern part? I
     % deleted that one, which also had Sec_PerLayer calculated as half
     Pri_PerLayer=floor(Np./Mlp);
     Sec_PerLayer=floor(Ns./Mls);
 
-    if layerTapeUse
-        numTapePerLayerPri = ceil((Vppeak./Mlp)./(kaptonDielStrength*kaptonThickness));
-        numTapePerLayerSec = ceil((Vinsulation_max./Mls)./(kaptonDielStrength*kaptonThickness));
-        tTapePri = max(Mlp-1,0).*numTapePerLayerPri.*kaptonThickness;
-        tTapeSec = max(Mls-1,0).*numTapePerLayerSec.*kaptonThickness;
+    if constantsXfmer{3}
+        numTapePerLayerPri = ceil((Vppeak./Mlp)./(constantsXfmer{5}*constantsXfmer{6}));
+        numTapePerLayerSec = ceil((Vinsulation_max./Mls)./(constantsXfmer{5}*constantsXfmer{6}));
+        tTapePri = max(Mlp-1,0).*numTapePerLayerPri.*constantsXfmer{6};
+        tTapeSec = max(Mls-1,0).*numTapePerLayerSec.*constantsXfmer{6};
     else
         numTapePerLayerPri = zeros(size(Mlp));
         numTapePerLayerSec = zeros(size(Mls));
@@ -426,7 +424,7 @@ else
     TLp = zeros(size(Np));
     TLs = zeros(size(Np));
 
-    switch Winding_Pattern
+    switch constantsXfmer{2}
         case 1 % center leg ----------------
 
             Ns_group1 = floor((H - 2.*CoreInsulationThickness)./Sec_FullWireDia);
@@ -528,8 +526,8 @@ else
     Sec_xp = Sec_ds./(2.*skindepth).*(sqrt(pi.*SecKlayer));
 
     % Rdc based on actual conductor cross-section (litz strands or solid)
-    Pri_Rdc = rou .* TLp ./ (Pri_Nstrands .* (pi .* Pri_ds.^2 ./ 4));
-    Sec_Rdc = rou .* TLs ./ (Sec_Nstrands .* (pi .* Sec_ds.^2 ./ 4));
+    Pri_Rdc = constantsXfmer{21} .* TLp ./ (Pri_Nstrands .* (pi .* Pri_ds.^2 ./ 4));
+    Sec_Rdc = constantsXfmer{21} .* TLs ./ (Sec_Nstrands .* (pi .* Sec_ds.^2 ./ 4));
     Pri_Fr = Pri_xp.*((sinh(2.*Pri_xp) + sin(2.*Pri_xp))./(cosh(2.*Pri_xp) - cos(2.* ...
         Pri_xp)) + 2.*(Mlp.^2.*Pri_Nstrands - 1)./3.*(sinh(Pri_xp) - sin(Pri_xp))./( ...
         cosh(Pri_xp) + cos(Pri_xp)));
@@ -557,55 +555,55 @@ else
         2.*H(isEE).*(PriW(isEE) + 2*PriH(isEE)) + ...  
         4.*W(isEE).*(PriW(isEE) + 2*PriH(isEE)) + ...   
         H(isEE).*(2*PriW(isEE) + 2*PriH(isEE)) ...      
-        ).*CoreInsulationThickness(isEE).*CoreInsulationDensity;
+        ).*CoreInsulationThickness(isEE).*constantsXfmer{9};
 
     % ER
     WeightCore_Insu(isER) = ( ...
         sqrt(2)*pi.*H(isER).*PriW(isER) + ...          
         sqrt(2)*pi.*2.*W(isER).*PriW(isER) + ...        
         H(isER).*pi.*PriW(isER) ...                     
-        ).*CoreInsulationThickness(isER).*CoreInsulationDensity;
+        ).*CoreInsulationThickness(isER).*constantsXfmer{9};
 
     % U
     WeightCore_Insu(isU) = ( ...
         2.*H(isU).*(2.*PriW(isU) + 2.*PriH(isU)) + ...
         2.*W(isU).*(2.*PriW(isU) + 2.*PriH(isU)) ) ...
-        .* CoreInsulationThickness(isU) .* CoreInsulationDensity;
+        .* CoreInsulationThickness(isU) .* constantsXfmer{9};
 
 
     % UR
     WeightCore_Insu(isUR) = ( ...
         2*H(isUR).*(pi.*PriW(isUR)) + 2*W(isUR).*(pi.*PriW(isUR))).*...
-        CoreInsulationThickness(isUR).*CoreInsulationDensity;
+        CoreInsulationThickness(isUR).*constantsXfmer{9};
 
    
     % Wire weights
     %---------------------------------------------
 
-    WeightPri_copper = pi.*Pri_WireDia.^2./4.*TLp.*CopperDensity;
-    WeightPri_Insu = (pi.*(Pri_FullWireDia.^2 - Pri_WireDia.^2)./4).*TLp.*WireInsulationDensity;
-    WeightSec_copper = pi.*Sec_WireDia.^2./4.*TLs.*CopperDensity;
-    WeightSec_Insu = (pi.*(Sec_FullWireDia.^2 - Sec_WireDia.^2)./4).*TLs.*WireInsulationDensity;
+    WeightPri_copper = pi.*Pri_WireDia.^2./4.*TLp.*constantsXfmer{20};
+    WeightPri_Insu = (pi.*(Pri_FullWireDia.^2 - Pri_WireDia.^2)./4).*TLp.*constantsXfmer{10};
+    WeightSec_copper = pi.*Sec_WireDia.^2./4.*TLs.*constantsXfmer{20};
+    WeightSec_Insu = (pi.*(Sec_FullWireDia.^2 - Sec_WireDia.^2)./4).*TLs.*constantsXfmer{10};
 
     % Tape weight
     %---------------------------------------------
     
         
-    if ~layerTapeUse
+    if ~constantsXfmer{3}
         Weight_InterlayerTape = zeros(size(Mlp));  % g
         V_tape = zeros(size(Mlp)); % g
         tapeMargin = 0;
     else
-        tapeMargin = max(0.02*H, MinTapeMargin);
+        tapeMargin = max(0.02*H, constantsXfmer{7});
         % total build incl. tape (for average circumference)
-        a1 = Mlp.*Pri_FullWireDia + max(Mlp-1,0).*numTapePerLayerPri.*kaptonThickness; % m
-        a2 = Mls.*Sec_FullWireDia + max(Mls-1,0).*numTapePerLayerSec.*kaptonThickness; % m
+        a1 = Mlp.*Pri_FullWireDia + max(Mlp-1,0).*numTapePerLayerPri.*constantsXfmer{6}; % m
+        a2 = Mls.*Sec_FullWireDia + max(Mls-1,0).*numTapePerLayerSec.*constantsXfmer{6}; % m
     
         % base per-turn length near inner radius
         Lbase_p = zeros(size(Mlp));
         Lbase_s = zeros(size(Mls));
     
-        if Winding_Pattern==1  % center-leg
+        if constantsXfmer{2}==1  % center-leg
             Lbase_p(isEE|isU)  = 2.*(PriW(isEE|isU) + PriH(isEE|isU) + 4.*CoreInsulationThickness(isEE|isU));
             Lbase_s(isEE|isU)  = Lbase_p(isEE|isU);
             Lbase_p(isER|isUR) = 2.*pi.*(PriW(isER|isUR)./2 + CoreInsulationThickness(isER|isUR));
@@ -632,10 +630,10 @@ else
     
         % tape width and volume
         w_tape = H + 2*tapeMargin;                 % m
-        V_tape = kaptonThickness .* w_tape .* L_tape_total;  % m^3
+        V_tape = constantsXfmer{6} .* w_tape .* L_tape_total;  % m^3
     
         % mass in grams (KaptonDensity in g/m^3)
-        Weight_InterlayerTape = kaptonDensity .* V_tape;  % g
+        Weight_InterlayerTape = constantsXfmer{8} .* V_tape;  % g
     end
    
     % Compute total weight
@@ -650,9 +648,9 @@ else
 
     % Magnetizing inductance
     
-    Lm = ui.*u0.*Ac.*Np.^2./Le;
+    Lm = ui.*constantsXfmer{22}.*Ac.*Np.^2./Le;
     WireInsulThickness = (Pri_FullWireDia-Pri_WireDia)./2;
-    Lleak = (u0.*Np.^2.*TLs)./(H-2.*WireInsulThickness).*...
+    Lleak = (constantsXfmer{22}.*Np.^2.*TLs)./(H-2.*WireInsulThickness).*...
         (WireInsulThickness+(Pri_PerLayer.*Pri_FullWireDia+ ...
         Sec_PerLayer.*Sec_FullWireDia)./3);
 
@@ -668,7 +666,7 @@ else
     %---------------------------------------------
 
     % Filter by B
-    B_index = find(Bm < BSAT*BSAT_discountX);
+    B_index = find(Bm < BSAT*constantsXfmer{12});
     [Bmin,BminIndex] = min(Bm);
         
     % Filter by Temperature
@@ -683,29 +681,29 @@ else
     [WMin,WminValIndex] = min(TotalWeight);
 
     % Filter by packing factor min and max
-    if Winding_Pattern == 2
+    if constantsXfmer{2} == 2
         CopperPacking  = (((pi.*(Pri_WireDia.^2))./4).*Np + ((pi.*(Sec_WireDia.^2))./4).*(Ns./2))./ (H.*W);
         OverallPacking = (((pi.*(Pri_FullWireDia.^2))./4).*Np + ((pi.*(Sec_FullWireDia.^2))./4).*(Ns./2))./(H.*W);
     else 
         CopperPacking  = (((pi.*(Pri_WireDia.^2))./4).*Np + ((pi.*(Sec_WireDia.^2))./4).*Ns)./ (H.*W);
         OverallPacking = (((pi.*(Pri_FullWireDia.^2))./4).*Np + ((pi.*(Sec_FullWireDia.^2))./4).*Ns)./(H.*W);
     end
-    if layerTapeUse
+    if constantsXfmer{3}
         % might be incorrect due to approx. as H*t 
-        if Winding_Pattern == 2
+        if constantsXfmer{2} == 2
             CopperPacking  = (((pi.*(Pri_WireDia.^2))./4).*Np + ((pi.*(Sec_WireDia.^2))./4).*(Ns./2))./ ((H-2.*tapeMargin).*W);
             OverallPacking = (((pi.*(Pri_FullWireDia.^2)/4).*Np + (pi.*(Sec_FullWireDia.^2)/4).*(Ns./2)) ...
-                + (H.* ( max(Mlp-1,0).*numTapePerLayerPri.*kaptonThickness ...
-                + max(Mls-1,0).*numTapePerLayerSec.*kaptonThickness))) ./ ((H-2.*tapeMargin).*W);
+                + (H.* ( max(Mlp-1,0).*numTapePerLayerPri.*constantsXfmer{6} ...
+                + max(Mls-1,0).*numTapePerLayerSec.*constantsXfmer{6}))) ./ ((H-2.*tapeMargin).*W);
         else 
             CopperPacking  = (((pi.*(Pri_WireDia.^2))./4).*Np + ((pi.*(Sec_WireDia.^2))./4).*Ns)./ ((H-2.*tapeMargin).*W);
             OverallPacking = (((pi.*(Pri_FullWireDia.^2)/4).*Np + (pi.*(Sec_FullWireDia.^2)/4).*(Ns)) ...
-                + (H.* ( max(Mlp-1,0).*numTapePerLayerPri.*kaptonThickness ...
-                + max(Mls-1,0).*numTapePerLayerSec.*kaptonThickness))) ./ ((H-2.*tapeMargin).*W);
+                + (H.* ( max(Mlp-1,0).*numTapePerLayerPri.*constantsXfmer{6} ...
+                + max(Mls-1,0).*numTapePerLayerSec.*constantsXfmer{6}))) ./ ((H-2.*tapeMargin).*W);
         end
     end
-    OverallPackingmin_index = find(OverallPacking >= minpackingfactorX);
-    OverallPackingmax_index = find(OverallPacking <= maxpackingfactorX);
+    OverallPackingmin_index = find(OverallPacking >= constantsXfmer{15});
+    OverallPackingmax_index = find(OverallPacking <= constantsXfmer{14});
     [PackingMin,PackingMinValIndex] = max(OverallPacking);
     [PackingMax,PackingMaxValIndex] = min(OverallPacking);
 
@@ -743,8 +741,8 @@ else
     is_U_or_UR_core  = (XcoreCoreShapeIndex==3) | (XcoreCoreShapeIndex==4);
     
     % Winding pattern masks
-    is_center_leg_pattern = (Winding_Pattern==1);
-    is_double_leg_pattern = (Winding_Pattern==2);
+    is_center_leg_pattern = (constantsXfmer{2}==1);
+    is_double_leg_pattern = (constantsXfmer{2}==2);
     
     % Final pass/fail vector for this group of constraints
     meetsWindowFitConstraints = false(size(Np));
@@ -830,8 +828,8 @@ else
     if(length(Index_Meet_All) >= 1)
         TotalWeightSortIndex = Index_Meet_All;
 
-        V_cu     = ((WeightPri_copper+WeightSec_copper))/CopperDensity;
-        V_insu   = ((WeightCore_Insu+WeightPri_Insu+WeightSec_Insu))/CoreInsulationDensity;
+        V_cu     = ((WeightPri_copper+WeightSec_copper))/constantsXfmer{20};
+        V_insu   = ((WeightCore_Insu+WeightPri_Insu+WeightSec_Insu))/constantsXfmer{9};
         Volume_m3 = Ve + V_cu + V_insu+V_tape;
 
         Sec_WireDiaMM = Sec_WireDia.*1000;
