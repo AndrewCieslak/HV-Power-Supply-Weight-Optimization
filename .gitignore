@@ -1,0 +1,17 @@
+# workspace
+build/
+compile_commands.json
+.cache
+logs/
+CMakeFiles/
+latex
+html
+
+# macOS
+.DS_Store
+
+# vcpkg
+vcpkg/buildtrees/
+vcpkg/downloads/
+vcpkg/packages/
+vcpkg/installed/
